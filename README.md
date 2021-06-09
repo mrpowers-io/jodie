@@ -62,3 +62,7 @@ You can leverage the upsert code if your SCD table meets these requirements:
 * SCD logic is exposed via `effective_time`, `end_time` and `is_current` column
 
 `merge` logic can get really messy, so it's easiest to follow these conventions.  See [this blog post](https://mungingdata.com/delta-lake/type-2-scd-upserts/) if you'd like to build a SCD with custom logic.
+
+## More about Jodie
+
+See [this video](https://www.youtube.com/watch?v=llHKvaV0scQ) for more info about the awesomeness of Jodie!
