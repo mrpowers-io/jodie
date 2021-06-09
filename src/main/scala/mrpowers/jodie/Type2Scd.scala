@@ -3,6 +3,10 @@ package mrpowers.jodie
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import io.delta.tables._
 
+
+case class JodieValidationError(smth: String) extends Exception(smth)
+
+
 object Type2Scd {
 
   def upsert(
@@ -23,9 +27,21 @@ object Type2Scd {
     effectiveTimeColName: String,
     endTimeColName: String
   ): Unit = {
-    // @todo error out if the underling Delta DF doesn't follow our conventions
-    // @todo error out if updatesDF doesn't follow the right conventions
     val baseTable = DeltaTable.forPath(SparkSession.active, path)
+    // validate the existing Delta table
+    val baseColNames = baseTable.toDF.columns.toSeq
+    val requiredBaseColNames = Seq(primaryKey) ++ attrColNames ++ Seq(isCurrentColName, effectiveTimeColName, endTimeColName)
+    // @todo move the validation logic to a separate abstraction
+    if (baseColNames.sorted != requiredBaseColNames.sorted) {
+      throw JodieValidationError(f"The base table has these columns '$baseColNames', but these columns are required '$requiredBaseColNames'")
+    }
+    // validate the updates DataFrame
+    val updatesColNames = updatesDF.columns.toSeq
+    val requiredUpdatesColNames = Seq(primaryKey) ++ attrColNames ++ Seq(effectiveTimeColName)
+    if (updatesColNames.sorted != requiredUpdatesColNames.sorted) {
+      throw JodieValidationError(f"The updates DataFrame has these columns '$updatesColNames', but these columns are required '$requiredUpdatesColNames'")
+    }
+    // perform the upsert
     val updatesAttrs = attrColNames.map(attr => f"updates.$attr <> base.$attr").mkString(" OR ")
     val stagedUpdatesAttrs = attrColNames.map(attr => f"staged_updates.$attr <> base.$attr").mkString(" OR ")
     val stagedPart1 = updatesDF
