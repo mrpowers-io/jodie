@@ -20,12 +20,19 @@ class Type2ScdSpec extends FunSpec with SparkSessionTestWrapper with BeforeAndAf
     it("upserts a Delta Lake with a single attribute") {
       val path = (os.pwd / "tmp" / "delta-upsert").toString()
       // create Delta Lake
-      val df = Seq(
+      val df = spark.createDF(
+        List(
         (1, "A", true, Timestamp.valueOf("2019-01-01 00:00:00"), null),
         (2, "B", true, Timestamp.valueOf("2019-01-01 00:00:00"), null),
         (4, "D", true, Timestamp.valueOf("2019-01-01 00:00:00"), null),
-      ).toDF("pkey", "attr", "is_current", "effective_time", "end_time")
-        .withColumn("end_time", $"end_time".cast(TimestampType))
+      ), List(
+        ("pkey", IntegerType, true),
+          ("attr", StringType, true),
+          ("is_current", BooleanType, true),
+          ("effective_time", TimestampType, true),
+          ("end_time", TimestampType, true)
+        )
+      )
       df.write.format("delta").save(path)
       // create updates DF
       val updatesDF = Seq(
@@ -49,12 +56,17 @@ class Type2ScdSpec extends FunSpec with SparkSessionTestWrapper with BeforeAndAf
     it("errors out if the base DataFrame doesn't contain all the required columns") {
       val path = (os.pwd / "tmp" / "delta-upsert-err").toString()
       // create Delta Lake
-      val df = Seq(
+      val df = spark.createDF(
+        List(
         (true, Timestamp.valueOf("2019-01-01 00:00:00"), null),
         (true, Timestamp.valueOf("2019-01-01 00:00:00"), null),
         (true, Timestamp.valueOf("2019-01-01 00:00:00"), null),
-      ).toDF("is_current", "effective_time", "end_time")
-        .withColumn("end_time", $"end_time".cast(TimestampType))
+      ), List(
+          ("is_current", BooleanType, true),
+          ("effective_time", TimestampType, true),
+          ("end_time", TimestampType, true)
+        )
+      )
       df.write.format("delta").save(path)
       // create updates DF
       val updatesDF = Seq(
@@ -70,12 +82,19 @@ class Type2ScdSpec extends FunSpec with SparkSessionTestWrapper with BeforeAndAf
     it("errors out if the updates table doesn't contain all the required columns") {
       val path = (os.pwd / "tmp" / "delta-upsert-err2").toString()
       // create Delta Lake
-      val df = Seq(
+      val df = spark.createDF(
+        List(
         (1, "A", true, Timestamp.valueOf("2019-01-01 00:00:00"), null),
         (2, "B", true, Timestamp.valueOf("2019-01-01 00:00:00"), null),
         (4, "D", true, Timestamp.valueOf("2019-01-01 00:00:00"), null),
-      ).toDF("pkey", "attr", "is_current", "effective_time", "end_time")
-        .withColumn("end_time", $"end_time".cast(TimestampType))
+      ), List(
+          ("pkey", IntegerType, true),
+          ("attr", StringType, true),
+          ("is_current", BooleanType, true),
+          ("effective_time", TimestampType, true),
+          ("end_time", TimestampType, true),
+        )
+      )
       df.write.format("delta").save(path)
       // create updates DF
       val updatesDF = Seq(
@@ -90,12 +109,20 @@ class Type2ScdSpec extends FunSpec with SparkSessionTestWrapper with BeforeAndAf
     it("upserts based on multiple attributes") {
       val path = (os.pwd / "tmp" / "delta-upsert2").toString()
       // create Delta Lake
-      val df = Seq(
+      val df = spark.createDF(
+        List(
         (1, "A", "A", true, Timestamp.valueOf("2019-01-01 00:00:00"), null),
         (2, "B", "B", true, Timestamp.valueOf("2019-01-01 00:00:00"), null),
         (4, "D", "D", true, Timestamp.valueOf("2019-01-01 00:00:00"), null),
-      ).toDF("pkey", "attr1", "attr2", "is_current", "effective_time", "end_time")
-        .withColumn("end_time", $"end_time".cast(TimestampType))
+      ), List(
+          ("pkey", IntegerType, true),
+          ("attr1", StringType, true),
+          ("attr2", StringType, true),
+          ("is_current", BooleanType, true),
+          ("effective_time", TimestampType, true),
+          ("end_time", TimestampType, true),
+        )
+      )
       df.write.format("delta").save(path)
       // create updates DF
       val updatesDF = Seq(
@@ -120,12 +147,19 @@ class Type2ScdSpec extends FunSpec with SparkSessionTestWrapper with BeforeAndAf
     it("upserts based on date columns") {
       val path = (os.pwd / "tmp" / "delta-upsert-date").toString()
       // create Delta Lake
-      val df = Seq(
+      val df = spark.createDF(List
+      (
         (1, "A", true, Date.valueOf("2019-01-01"), null),
         (2, "B", true, Date.valueOf("2019-01-01"), null),
         (4, "D", true, Date.valueOf("2019-01-01"), null),
-      ).toDF("pkey", "attr", "cur", "effective_date", "end_date")
-        .withColumn("end_date", $"end_date".cast(DateType))
+      ), List(
+        ("pkey", IntegerType, true),
+        ("attr", StringType, true),
+        ("cur", BooleanType, true),
+        ("effective_date", DateType, true),
+        ("end_date", DateType, true),
+      )
+      )
       df.write.format("delta").save(path)
       // create updates DF
       val updatesDF = Seq(
