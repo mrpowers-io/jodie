@@ -2,6 +2,8 @@
 
 This library provides helpful Delta Lake and filesystem utility functions.
 
+![jodie](https://github.com/MrPowers/jodie/blob/main/images/jodie.jpeg)
+
 ## Accessing the library
 
 *How to access the code*
