@@ -4,9 +4,6 @@ import org.apache.spark.sql.{DataFrame, SparkSession}
 import io.delta.tables._
 
 
-case class JodieValidationError(smth: String) extends Exception(smth)
-
-
 object Type2Scd {
 
   def upsert(
