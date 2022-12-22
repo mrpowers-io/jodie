@@ -65,6 +65,128 @@ You can leverage the upsert code if your SCD table meets these requirements:
 
 `merge` logic can get really messy, so it's easiest to follow these conventions.  See [this blog post](https://mungingdata.com/delta-lake/type-2-scd-upserts/) if you'd like to build a SCD with custom logic.
 
+### Remove Duplicates
+
+There are two versions of the `removeDuplicateRecords` function. One deletes all the duplicated records from a table, and
+the other one also deletes duplicates but keeps one occurrence of each record that was duplicated.
+
+#### Let’s see an example of how to use the first version:
+
+Suppose you have the following table:
+
+```
++----+---------+---------+
+|  id|firstname| lastname|
++----+---------+-----------+
+|   1|   Benito|  Jackson| # duplicate
+|   2|    Maria|   Willis|
+|   3|     Jose| Travolta| # duplicate
+|   4|   Benito|  Jackson| # duplicate
+|   5|     Jose| Travolta| # duplicate
+|   6|    Maria|     Pitt|
+|   9|   Benito|  Jackson| # duplicate
++----+---------+---------+
+```
+We can Run the following function to remove all duplicates:
+
+```scala
+DeltaHelpers.removeDuplicateRecords(deltaTable = deltaTable, duplicateColumns = Seq("firstname","lastname"))
+```
+
+The result of running the previous function is the following table:
+
+```
++----+---------+---------+
+|  id|firstname| lastname|
++----+---------+-----------+
+|   2|    Maria|   Willis|
+|   6|    Maria|     Pitt|
++----+---------+---------+
+```
+
+#### Now let’s see an example of how to use the second version:
+
+Suppose you have the same initial table:
+
+```
++----+---------+---------+
+|  id|firstname| lastname|
++----+---------+-----------+
+|   1|   Benito|  Jackson| # duplicate
+|   2|    Maria|   Willis|
+|   3|     Jose| Travolta| # duplicate
+|   4|   Benito|  Jackson| # duplicate
+|   5|     Jose| Travolta| # duplicate
+|   6|    Maria|     Pitt|
+|   9|   Benito|  Jackson| # duplicate
++----+---------+---------+
+```
+
+We can Run the following function to remove duplicates but keep one occurrence of each record that was duplicated:
+
+```scala
+DeltaHelpers.removeDuplicateRecords(deltaTable = deltaTable, primaryKey = "id", duplicateColumns = Seq("firstname","lastname"))
+```
+
+The result of running the previous function is the following:
+
+```
++----+---------+---------+
+|  id|firstname| lastname|
++----+---------+-----------+
+|   1|   Benito|  Jackson|
+|   2|    Maria|   Willis|
+|   3|     Jose| Travolta|
+|   6|    Maria|     Pitt|
++----+---------+---------+
+```
+
+Note how we keep one occurrence of each record that was duplicated. This function comes in handy when you are doing data
+cleansing.
+
+### Copy Delta Table
+This function takes an existing delta table and makes a copy of all its data, properties,
+and partitions to a new delta table. The new table could be created based on a specified path or
+just a given table name. 
+
+Copying does not include the delta log, which means that you will not be able to restore the new table to an old version of the original table.
+
+Here's how to perform the copy to a specific path:
+
+```scala
+DeltaHelpers.copyTable(deltaTable = deltaTable, targetPath = Some(targetPath))
+```
+
+Here's how to perform the copy using a table name:
+
+```scala
+DeltaHelpers.copyTable(deltaTable = deltaTable, targetTableName = Some(tableName))
+```
+
+Note the location where the table will be stored in this last function call 
+will be based on the spark conf property `spark.sql.warehouse.dir`.
+
+### Latest Version of Delta Table
+The function `latestVersion` return the latest version number of a table given its storage path. 
+
+Here's how to use the function:
+```scala
+DeltaHelpers.latestVersion(path = "file:/path/to/your/delta-lake/table")
+```
+
+## Hive
+### Create View
+This function `createOrReplaceHiveView` creates a hive view from a delta table. The View will contain all the columns
+of the delta table, meaning that it will be like coping the table to a view not filtering or transformations are possible.
+
+Here's how to use the function:
+```scala
+HiveViewHelpers.createOrReplaceHiveView(viewName = "students",deltaPath = "file:/path/to/your/delta-lake/table",deltaVersion = 100L)
+```
+
+Note that this function will create the hive view based on a specific version of the delta table. 
+
+
 ## More about Jodie
 
 See [this video](https://www.youtube.com/watch?v=llHKvaV0scQ) for more info about the awesomeness of Jodie!
