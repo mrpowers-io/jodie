@@ -90,7 +90,7 @@ Suppose you have the following table:
 We can Run the following function to remove all duplicates:
 
 ```scala
-DeltaHelpers.removeDuplicateRecords(deltaTable,Seq("firstname","lastname"))
+DeltaHelpers.removeDuplicateRecords(deltaTable = deltaTable, duplicateColumns = Seq("firstname","lastname"))
 ```
 
 The result of running the previous function is the following table:
@@ -125,7 +125,7 @@ Suppose you have the same initial table:
 We can Run the following function to remove duplicates but keep one occurrence of each record that was duplicated:
 
 ```scala
-DeltaHelpers.removeDuplicateRecords(deltaTable,"id",Seq("firstname","lastname"))
+DeltaHelpers.removeDuplicateRecords(deltaTable = deltaTable, primaryKey = "id", duplicateColumns = Seq("firstname","lastname"))
 ```
 
 The result of running the previous function is the following:
@@ -154,17 +154,38 @@ Copying does not include the delta log, which means that you will not be able to
 Here's how to perform the copy to a specific path:
 
 ```scala
-DeltaHelpers.copyTable(deltaTable, targetPath = Some(targetPath))
+DeltaHelpers.copyTable(deltaTable = deltaTable, targetPath = Some(targetPath))
 ```
 
 Here's how to perform the copy using a table name:
 
 ```scala
-DeltaHelpers.copyTable(deltaTable, targetTableName = Some(tableName))
+DeltaHelpers.copyTable(deltaTable = deltaTable, targetTableName = Some(tableName))
 ```
 
 Note the location where the table will be stored in this last function call 
 will be based on the spark conf property `spark.sql.warehouse.dir`.
+
+### Latest Version of Delta Table
+The function `latestVersion` return the latest version number of a table given its storage path. 
+
+Here's how to use the function:
+```scala
+DeltaHelpers.latestVersion(path = "file:/path/to/your/delta-lake/table")
+```
+
+## Hive
+### Create View
+This function `createOrReplaceHiveView` creates a hive view from a delta table. The View will contain all the columns
+of the delta table, meaning that it will be like coping the table to a view not filtering or transformations are possible.
+
+Here's how to use the function:
+```scala
+HiveViewHelpers.createOrReplaceHiveView(viewName = "students",deltaPath = "file:/path/to/your/delta-lake/table",deltaVersion = 100L)
+```
+
+Note that this function will create the hive view based on a specific version of the delta table. 
+
 
 ## More about Jodie
 
