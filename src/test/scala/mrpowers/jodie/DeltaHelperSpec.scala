@@ -226,4 +226,108 @@ class DeltaHelperSpec extends FunSpec with SparkSessionTestWrapper with DataFram
       assert(exceptionMessage.contains(s"these columns: $diff do not exists in the dataframe: $tableColumns"))
     }
   }
+
+  describe("copy a delta table to a new table"){
+    it("should create a new delta table from an existing one using path"){
+      val path = (os.pwd / "tmp" / "delta-copy-from-existing-path").toString()
+
+      val df = Seq(
+        (1, "Benito", "Jackson"),
+        (2, "Maria", "Willis"),
+        (3, "Jose", "Travolta"),
+        (4, "Patricia", "Jackson"),
+        (5, "Jose", "Travolta"),
+        (6, "Gabriela", "Travolta"),
+        (7, "Maria", "Pitt")
+      ).toDF("id", "firstname", "lastname")
+      df.write
+        .format("delta")
+        .mode("overwrite")
+        .partitionBy("lastname","firstname")
+        .option("delta.logRetentionDuration","interval 30 days")
+        .save(path)
+      val deltaTable = DeltaTable.forPath(path)
+      val targetPath = (os.pwd / "tmp" / "delta-copy-from-existing-target-path").toString()
+      DeltaHelpers.copyTable(deltaTable, targetPath = Some(targetPath))
+
+      assertSmallDataFrameEquality(DeltaTable.forPath(targetPath).toDF, df, orderedComparison = false, ignoreNullable = true)
+    }
+
+    it("should copy table from existing one using table name"){
+      val path = (os.pwd / "tmp" / "delta-copy-from-existing-tb-name").toString()
+
+      val df = Seq(
+        (1, "Benito", "Jackson"),
+        (2, "Maria", "Willis"),
+        (3, "Jose", "Travolta"),
+        (4, "Patricia", "Jackson"),
+        (5, "Jose", "Travolta"),
+        (6, "Gabriela", "Travolta"),
+        (7, "Maria", "Pitt")
+      ).toDF("id", "firstname", "lastname")
+      df.write
+        .format("delta")
+        .mode("overwrite")
+        .partitionBy("lastname")
+        .option("delta.logRetentionDuration", "interval 30 days")
+        .save(path)
+      val deltaTable = DeltaTable.forPath(path)
+      val tableName = "students"
+      DeltaHelpers.copyTable(deltaTable, targetTableName = Some(tableName))
+      assertSmallDataFrameEquality(DeltaTable.forName(spark,tableName).toDF, df, orderedComparison = false, ignoreNullable = true)
+    }
+
+    it("should fail to copy when no table name or target path is set"){
+      val path = (os.pwd / "tmp" / "delta-copy-non-destination").toString()
+
+      val df = Seq(
+        (1, "Benito", "Jackson"),
+        (2, "Maria", "Willis"),
+        (3, "Jose", "Travolta"),
+        (4, "Patricia", "Jackson"),
+        (5, "Jose", "Travolta"),
+        (6, "Gabriela", "Travolta"),
+        (7, "Maria", "Pitt")
+      ).toDF("id", "firstname", "lastname")
+      df.write
+        .format("delta")
+        .mode("overwrite")
+        .partitionBy("lastname")
+        .option("delta.logRetentionDuration", "interval 30 days")
+        .save(path)
+      val deltaTable = DeltaTable.forPath(path)
+      val exceptionMessage = intercept[JodieValidationError]{
+        DeltaHelpers.copyTable(deltaTable)
+      }.getMessage
+
+      assert(exceptionMessage.contains("Either targetPath or targetTableName must be specified."))
+    }
+
+    it("should fail to copy when both table name and target path are set"){
+      val path = (os.pwd / "tmp" / "delta-copy-two-destination").toString()
+      val df = Seq(
+        (1, "Benito", "Jackson"),
+        (2, "Maria", "Willis"),
+        (3, "Jose", "Travolta"),
+        (4, "Patricia", "Jackson"),
+        (5, "Jose", "Travolta"),
+        (6, "Gabriela", "Travolta"),
+        (7, "Maria", "Pitt")
+      ).toDF("id", "firstname", "lastname")
+      df.write
+        .format("delta")
+        .mode("overwrite")
+        .partitionBy("lastname")
+        .option("delta.logRetentionDuration", "interval 30 days")
+        .save(path)
+      val deltaTable = DeltaTable.forPath(path)
+      val tableName = "students"
+      val tablePath = (os.pwd / "tmp" / "delta-copy-from-existing-target-path").toString()
+      val exceptionMessage = intercept[JodieValidationError] {
+        DeltaHelpers.copyTable(deltaTable,Some(tablePath),Some(tableName))
+      }.getMessage
+
+      assert(exceptionMessage.contains("Ambiguous destination only one of the two must be defined targetPath or targetTableName."))
+    }
+  }
 }
