@@ -98,4 +98,31 @@ object DeltaHelpers {
       .execute()
   }
 
+  /**
+   * This function takes an existing delta table and make an copy of all its data, properties
+   * and partitions to a new delta table. The new table could be created based on a specified path or
+   * just a given table name, one must take in account that if the table is created using name the path
+   * of the table will be the one specified in the spark config property spark.sql.warehouse.dir .
+   * @param deltaTable: delta table object.
+   * @param targetPath: path to directory where the table will be created, this is an optional attribute
+   * that can be replaced by targetTableName.
+   * @param targetTableName: name of the table that will be created.
+   */
+  def copyTable(deltaTable: DeltaTable, targetPath: Option[String] = None, targetTableName: Option[String] =None):Unit = {
+    val details = deltaTable.detail().select("partitionColumns","properties").collect().head
+
+    val insertStatement = deltaTable.toDF
+      .write
+      .format("delta")
+      .partitionBy(details.getAs[Seq[String]]("partitionColumns"): _*)
+      .options(details.getAs[Map[String, String]]("properties"))
+
+    (targetTableName,targetPath) match {
+      case (Some(tableName),None) => insertStatement.saveAsTable(tableName)
+      case (None,Some(path)) => insertStatement.save(path)
+      case (Some(_),Some(_)) => throw  JodieValidationError("Ambiguous destination only one of the two must be defined targetPath or targetTableName.")
+      case (None,None) => throw JodieValidationError("Either targetPath or targetTableName must be specified.")
+    }
+  }
+
 }

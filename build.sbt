@@ -4,9 +4,9 @@ version := "0.0.1"
 
 scalaVersion := "2.12.12"
 
-libraryDependencies += "org.apache.spark" %% "spark-sql" % "3.1.1" % "provided"
+libraryDependencies += "org.apache.spark" %% "spark-sql" % "3.3.1" % "provided"
 
-libraryDependencies += "io.delta" %% "delta-core" % "1.0.0" % "provided"
+libraryDependencies += "io.delta" %% "delta-core" % "2.1.0" % "provided"
 libraryDependencies += "com.github.mrpowers" %% "spark-daria" % "0.38.2"
 libraryDependencies += "com.github.mrpowers" %% "spark-fast-tests" % "1.0.0" % "test"
 libraryDependencies += "org.scalatest" %% "scalatest" % "3.0.1" % "test"
