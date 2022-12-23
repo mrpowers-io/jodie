@@ -174,6 +174,53 @@ Here's how to use the function:
 DeltaHelpers.latestVersion(path = "file:/path/to/your/delta-lake/table")
 ```
 
+### Insert Data Without Duplicates
+The function `appendWithoutDuplicates` inserts data into an existing delta table and prevents data duplication in the process.
+Let's see an example of how it works.
+
+Suppose we have the following table:
+
+```
++----+---------+---------+
+|  id|firstname| lastname|
++----+---------+-----------+
+|   1|   Benito|  Jackson|
+|   4|    Maria|     Pitt|
+|   6|  Rosalia|     Pitt|
++----+---------+---------+
+```
+And we want to insert this new dataframe:
+
+```
++----+---------+---------+
+|  id|firstname| lastname|
++----+---------+-----------+
+|   6|  Rosalia|     Pitt| # duplicate
+|   2|    Maria|   Willis|
+|   3|     Jose| Travolta|
+|   4|    Maria|     Pitt| # duplicate
++----+---------+---------+
+```
+
+We can use the following function to insert new data and avoid data duplication:
+```scala
+DeltaHelpers.appendWithoutDuplicates(deltaTable = deltaTable,appendData = newDataDF, primaryKeysColumns = Seq("firstname","lastname"))
+```
+
+The result table will be the following:
+
+```
++----+---------+---------+
+|  id|firstname| lastname|
++----+---------+-----------+
+|   1|   Benito|  Jackson|
+|   4|    Maria|     Pitt|
+|   6|  Rosalia|     Pitt|
+|   2|    Maria|   Willis|
+|   3|     Jose| Travolta| 
++----+---------+---------+
+```
+
 ## Hive
 ### Create View
 This function `createOrReplaceHiveView` creates a hive view from a delta table. The View will contain all the columns
