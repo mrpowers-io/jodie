@@ -1,6 +1,6 @@
 package mrpowers.jodie
 
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{DataFrame, SparkSession}
 import io.delta.tables._
 import org.apache.spark.sql.expressions.Window.partitionBy
 import org.apache.spark.sql.functions.{col, count, row_number}
@@ -123,6 +123,25 @@ object DeltaHelpers {
       case (Some(_),Some(_)) => throw  JodieValidationError("Ambiguous destination only one of the two must be defined targetPath or targetTableName.")
       case (None,None) => throw JodieValidationError("Either targetPath or targetTableName must be specified.")
     }
+  }
+
+  /***
+   * This function inserts data into an existing delta table and prevents data duplication in the process.
+   * @param deltaTable: delta table object
+   * @param appendData: new data to be inserted in the existing delta table
+   * @param primaryKeysColumns: set of columns that grouped form a unique key inside the table.
+   */
+  def appendWithoutDuplicates(deltaTable:DeltaTable, appendData:DataFrame, primaryKeysColumns:Seq[String]): Unit = {
+    if(primaryKeysColumns.isEmpty)
+      throw new NoSuchElementException("The attribute primaryKeysColumns must not be empty")
+
+    val mergeCondition = primaryKeysColumns.map(c=> s"old.$c = new.$c").mkString(" AND ")
+
+    deltaTable.alias("old")
+      .merge(appendData.alias("new"),mergeCondition)
+      .whenNotMatched()
+      .insertAll()
+      .execute()
   }
 
 }

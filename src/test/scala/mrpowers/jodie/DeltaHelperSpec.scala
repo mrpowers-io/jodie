@@ -330,4 +330,90 @@ class DeltaHelperSpec extends FunSpec with SparkSessionTestWrapper with DataFram
       assert(exceptionMessage.contains("Ambiguous destination only one of the two must be defined targetPath or targetTableName."))
     }
   }
+
+  describe("Append without duplicating data"){
+    it("should insert data into an existing delta table and not duplicates in case some records already exists"){
+      val path = (os.pwd / "tmp" / "delta-lake-inserts-no-dup").toString()
+      Seq(
+        (1, "Benito", "Jackson"),
+        (2, "Maria", "Willis"),
+        (3, "Jose", "Travolta")
+      )
+        .toDF("id", "firstname", "lastname")
+        .write
+        .format("delta")
+        .mode("overwrite")
+        .option("delta.logRetentionDuration", "interval 30 days")
+        .save(path)
+      val deltaTable = DeltaTable.forPath(path)
+      val df = Seq(
+        (4, "Maria", "Jackson"),
+        (5, "Jose", "Travolta"),
+        (6, "Gabriela", "Travolta"),
+        (7, "Maria", "Pitt")
+      )
+        .toDF("id", "firstname", "lastname")
+
+      DeltaHelpers.appendWithoutDuplicates(deltaTable,df,Seq("firstname","lastname"))
+
+      val expected = Seq(
+        (1, "Benito", "Jackson"),
+        (2, "Maria", "Willis"),
+        (3, "Jose", "Travolta"),
+        (4, "Maria", "Jackson"),
+        (6, "Gabriela", "Travolta"),
+        (7, "Maria", "Pitt")
+      ).toDF("id", "firstname", "lastname")
+      val result = DeltaTable.forPath(path)
+      assertSmallDataFrameEquality(result.toDF,expected,orderedComparison = false,ignoreNullable = true)
+    }
+
+    it("it should fail to insert data when primaryKeysColumns is empty"){
+      val path = (os.pwd / "tmp" / "delta-lake-inserts-no-dup").toString()
+      Seq(
+        (1, "Benito", "Jackson"),
+        (2, "Maria", "Willis"),
+        (3, "Jose", "Travolta")
+      )
+        .toDF("id", "firstname", "lastname")
+        .write
+        .format("delta")
+        .mode("overwrite")
+        .option("delta.logRetentionDuration", "interval 30 days")
+        .save(path)
+      val deltaTable = DeltaTable.forPath(path)
+      val df = Seq(
+        (4, "Maria", "Jackson"),
+        (5, "Jose", "Travolta"),
+      ).toDF("id", "firstname", "lastname")
+
+      val exceptionMessage = intercept[NoSuchElementException]{
+        DeltaHelpers.appendWithoutDuplicates(deltaTable,df,Seq())
+      }.getMessage
+
+      assert(exceptionMessage.contains("The attribute primaryKeysColumns must not be empty"))
+    }
+
+    it("should execute successful when an empty dataframe(appendData) is given"){
+      val path = (os.pwd / "tmp" / "delta-lake-inserts-no-dup").toString()
+      Seq(
+        (1, "Benito", "Jackson"),
+        (2, "Maria", "Willis"),
+        (3, "Jose", "Travolta")
+      )
+        .toDF("id", "firstname", "lastname")
+        .write
+        .format("delta")
+        .mode("overwrite")
+        .option("delta.logRetentionDuration", "interval 30 days")
+        .save(path)
+      val deltaTable = DeltaTable.forPath(path)
+      val df = Seq.empty[(String,String,String)].toDF("id", "firstname", "lastname")
+      DeltaHelpers.appendWithoutDuplicates(deltaTable,df,Seq("firstname","lastname"))
+      val result = DeltaTable.forPath(path)
+
+      assertSmallDataFrameEquality(result.toDF,deltaTable.toDF,orderedComparison = false,ignoreNullable = true)
+    }
+
+  }
 }
