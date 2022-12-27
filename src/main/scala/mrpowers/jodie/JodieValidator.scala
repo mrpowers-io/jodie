@@ -2,7 +2,8 @@ package mrpowers.jodie
 
 import org.apache.spark.sql.DataFrame
 
-case class JodieValidationError(smth: String) extends Exception(smth)
+case class JodieValidationError(smth: String,e:Throwable = new Exception()) extends Exception(smth,e)
+
 object JodieValidator {
   def validateColumnsExistsInDataFrame(columns:Seq[String],df:DataFrame):Unit ={
     val dataFrameColumns = df.columns.toSeq
