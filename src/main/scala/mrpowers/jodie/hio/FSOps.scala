@@ -1,6 +1,7 @@
 package hio
 
 import mrpowers.jodie.JodieValidationError
+import org.apache.commons.io.IOUtils
 import org.apache.hadoop.fs.permission.FsPermission
 import org.apache.hadoop.fs._
 
@@ -21,18 +22,24 @@ object mkdir{
   }
 }
 
+/**
+ * This Operation support writing String and byte array data to disk.
+ */
 object write {
-  def apply(path:JodiePath,fileContent:FileContent,createFlag: CreateFlag = CreateFlag.CREATE):Unit = {
+  def apply(path:JodiePath,fileContent:FileContent,
+            createFlag: util.EnumSet[CreateFlag] = util.EnumSet.of(CreateFlag.CREATE,CreateFlag.OVERWRITE) ):Unit = {
+
     val fileContext = FileContext.getFileContext(path.uri)
-    val outputStream = fileContext.create(path.path, util.EnumSet.of(createFlag))
+    val outputStream = fileContext.create(path.path, createFlag)
     val content = fileContent()
-    outputStream.write(content,0,content.length)
+    outputStream.write(content)
     outputStream.close()
   }
 }
 
 /**
- * This operation list all the files and folder in a folder. It provides two function...
+ * This operation list all the files and folder in a folder.
+ * It support simple searches and wildcard searches.
  */
 object ls{
 
@@ -79,5 +86,24 @@ object remove{
           .getFileContext(path.uri)
           .delete(path.path,true)
       }
+  }
+}
+
+object read{
+  def apply(path:JodiePath): FSDataInputStream = {
+    FileContext
+      .getFileContext(path.uri)
+      .open(path.path)
+  }
+
+  object string{
+    def apply(path: JodiePath): String = {
+      val outputStream = FileContext
+        .getFileContext(path.uri)
+        .open(path.path)
+      val fileContent = IOUtils.toString(outputStream, hio.FileContent.CHARSET)
+      outputStream.close()
+      fileContent
+    }
   }
 }

@@ -19,7 +19,7 @@ trait PathPart{
 object PathPart{
   implicit class StringPathPart(s:String) extends PathPart {
     override def segments: Seq[String] = Seq(s)
-    override def toString = s
+    override def toString: String = s
   }
 
   implicit class URIPathPart(s:URI) extends PathPart{
@@ -38,7 +38,7 @@ trait BasePath{
 
   def lastName:String
 
-  def baseName:String
+  def baseName:ThisType
 }
 
 
@@ -64,11 +64,13 @@ class JodiePath private[hio](val path:HadoopPath) extends BasePath {
     else ""
   }
   override def lastName: String = path.getName
-  override def baseName: String = {
+  override def baseName: JodiePath = {
     @tailrec
-    def getRoot(hadoopPath:HadoopPath):String ={
-      if(hadoopPath.getParent.isRoot){
-        hadoopPath.toString
+    def getRoot(hadoopPath:HadoopPath):JodiePath ={
+      if(hadoopPath.isRoot){
+        new JodiePath(hadoopPath)
+      }else if(hadoopPath.getParent.isRoot){
+        new JodiePath(hadoopPath)
       }else{
         getRoot(hadoopPath.getParent)
       }
@@ -77,9 +79,9 @@ class JodiePath private[hio](val path:HadoopPath) extends BasePath {
   }
 
   //TODO: add validation when the home or wd is tried to be get but the fileSystem does not exits or is incorrect
-  def home: String = FileContext.getFileContext(path.toUri).getHomeDirectory.toString
+  def home: JodiePath = new JodiePath(FileContext.getFileContext(path.toUri).getHomeDirectory)
 
-  def wd:String = FileContext.getFileContext(path.toUri).getWorkingDirectory.toString
+  def wd:JodiePath = new JodiePath(FileContext.getFileContext(path.toUri).getWorkingDirectory)
 
   def uri:URI = path.toUri
 

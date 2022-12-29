@@ -1,10 +1,22 @@
 package mrpowers.jodie
 
+import org.apache.commons.io.IOUtils
 import org.scalatest.{BeforeAndAfterEach, FunSpec}
+
+import java.io.{ByteArrayOutputStream, ObjectOutputStream}
 
 class FSOpsSpec extends FunSpec with FileContextTestWrapper with BeforeAndAfterEach {
   override protected def afterEach(): Unit = {
     hio.remove.all(wd)
+  }
+
+  override protected def beforeEach(): Unit = {
+    hio.mkdir(wd / "dir1")
+    hio.mkdir(wd / "dir2")
+    hio.mkdir(wd / "dir3")
+    hio.write(wd / "dir1/test_data1.txt", "hola1")
+    hio.write(wd / "dir1/test_data2.txt", "hola2")
+    hio.write(wd / "dir1/test_data3.txt", "hola3")
   }
 
   describe("list files/folders operations"){
@@ -27,9 +39,9 @@ class FSOpsSpec extends FunSpec with FileContextTestWrapper with BeforeAndAfterE
     it("should list all the files given the wildcard"){
       val result = hio.ls.withWildCard(wd /"dir1" /"*.txt")
       val expected = List(
-        "file:/Users/brayan_jules/projects/open-source/jodie/hio-tmp/dir1/test_data1.txt",
-        "file:/Users/brayan_jules/projects/open-source/jodie/hio-tmp/dir1/test_data2.txt",
-        "file:/Users/brayan_jules/projects/open-source/jodie/hio-tmp/dir1/test_data3.txt")
+        (wd / "dir1/test_data1.txt").toString,
+        (wd / "dir1/test_data2.txt").toString,
+        (wd / "dir1/test_data3.txt").toString)
       assert(result == expected)
     }
   }
@@ -60,22 +72,86 @@ class FSOpsSpec extends FunSpec with FileContextTestWrapper with BeforeAndAfterE
          |lines
          |""".stripMargin
 
-     hio.write(wd / "dir1" / "dir4" / "jodie2.txt", content)
-
-     val jodieFile = wd / "dir1" / "dir4" / "jodie2.txt"
-     val result = hio.ls(jodieFile)
-
-     assert(result.contains(jodieFile.toString))
-
+     val testFile = wd / "dir1" / "test_data4.txt"
+     hio.write(testFile, content)
+     val result = hio.ls(testFile)
+     assert(result.contains(testFile.toString))
    }
 
+    it("should overwrite an existing file with string data to disk") {
+      val content =
+        """
+          |User data
+          |of multiple
+          |lines
+          |""".stripMargin
+
+      val testFile = wd / "dir1" / "test_data3.txt"
+      hio.write(testFile, content)
+      val result = hio.read.string(testFile)
+      assert(result == content)
+    }
+
     it("should write objects "){
-      case class User(name: String, email: String)
-      val user = User("bj", "bj@gmail.com")
+      class User(val name: String, val email: String) extends Serializable
+      val user = new User("bj", "bj@gmail.com")
+
+      val stream: ByteArrayOutputStream = new ByteArrayOutputStream()
+      val oos = new ObjectOutputStream(stream)
+      oos.writeObject(user)
+      oos.close()
+
+      val filePath = wd/"dir3"/ "user.txt"
+      hio.write(filePath,stream.toByteArray)
+      val result = hio.ls(filePath)
+      assert(result.contains(filePath.toString))
     }
   }
 
   describe("delete folder and files operation"){
+    it("should remove one file"){
+      val filePath = wd / "dir1/test_data1.txt"
+      hio.ls(filePath)
+      hio.remove(filePath)
+      val messageException = intercept[JodieValidationError]{
+        hio.ls(filePath)
+      }.getMessage
+      assert(messageException == s"The Path $filePath does not exists")
+    }
 
+    it("should remove one folder") {
+      val filePath = wd / "dir2"
+      hio.remove(filePath)
+      val result = hio.ls(wd)
+      assert(!result.contains(filePath.toString))
+    }
+
+    it("should remove all nested folder/files"){
+      val filePath = wd / "dir1"
+      hio.remove.all(filePath)
+      val result = hio.ls(wd)
+      println(hio.ls(wd))
+      assert(!result.contains(filePath.toString))
+    }
+
+    it("should remove all txt files from a folder using wildcard"){
+      //todo: could be implemented using hio.ls.wildcard + hio.remove but is going to be slow
+    }
+  }
+
+  describe("Read the content of a file into memory"){
+    it("should load the content of a file into memory"){
+      val filePath = wd / "dir1/test_data3.txt"
+      val outputStream = hio.read(filePath)
+      val result = IOUtils.toString(outputStream, hio.FileContent.CHARSET)
+      outputStream.close()
+      assert(result == "hola3")
+    }
+
+    it("should load the content of a file into memory and parse it to string ") {
+      val filePath = wd / "dir1/test_data2.txt"
+      val result = hio.read.string(filePath)
+      assert(result == "hola2")
+    }
   }
 }
