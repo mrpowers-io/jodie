@@ -85,12 +85,20 @@ class JodiePath private[hio](val path:HadoopPath) extends BasePath {
 
   def uri:URI = path.toUri
 
+  def relativePath:HadoopPath = {
+    val pathValue = path.toUri.getPath
+    if(pathValue.nonEmpty)
+       new HadoopPath(pathValue)
+    else new HadoopPath(JodiePath.SLASH_SEPARATOR)
+  }
+
   override def toString: String = path.toUri.toString
 }
 
 object JodiePath{
 
   private val PERIOD_SEPARATOR = "."
+  private val SLASH_SEPARATOR = "/"
   def apply[T:ConvertiblePath](value:T):JodiePath = {
     val newPath = implicitly[ConvertiblePath[T]].apply(value)
     new JodiePath(newPath)

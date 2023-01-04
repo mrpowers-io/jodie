@@ -1,4 +1,5 @@
 name := "jodie"
+organization := "com.github.mrpowers"
 
 version := "0.0.1"
 
@@ -11,6 +12,9 @@ libraryDependencies += "com.github.mrpowers" %% "spark-daria" % "0.38.2"
 libraryDependencies += "com.github.mrpowers" %% "spark-fast-tests" % "1.0.0" % "test"
 libraryDependencies += "org.scalatest" %% "scalatest" % "3.0.1" % "test"
 libraryDependencies += "com.lihaoyi" %% "os-lib" % "0.7.1" % "test"
+libraryDependencies += "org.apache.hadoop" % "hadoop-aws" % "3.3.1"
+libraryDependencies += "org.apache.hadoop" % "hadoop-azure" % "3.3.1"
+libraryDependencies += "com.github.pureconfig" %% "pureconfig" % "0.17.1"
 
 // test suite settings
 fork in Test := true
