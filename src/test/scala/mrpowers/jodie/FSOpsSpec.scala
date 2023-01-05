@@ -3,7 +3,7 @@ package mrpowers.jodie
 import org.apache.commons.io.IOUtils
 import org.scalatest.{BeforeAndAfterEach, FunSpec}
 
-import java.io.{ByteArrayOutputStream, ObjectOutputStream}
+import java.io.{ByteArrayOutputStream, IOException, ObjectOutputStream}
 
 class FSOpsSpec extends FunSpec with FileContextTestWrapper with BeforeAndAfterEach {
   override protected def afterEach(): Unit = {
@@ -14,6 +14,7 @@ class FSOpsSpec extends FunSpec with FileContextTestWrapper with BeforeAndAfterE
     hio.mkdir(wd / "dir1")
     hio.mkdir(wd / "dir2")
     hio.mkdir(wd / "dir3")
+    hio.mkdir(wd / "dir1" / "dir4")
     hio.write(wd / "dir1/test_data1.txt", "hola1")
     hio.write(wd / "dir1/test_data2.txt", "hola2")
     hio.write(wd / "dir1/test_data3.txt", "hola3")
@@ -67,12 +68,12 @@ class FSOpsSpec extends FunSpec with FileContextTestWrapper with BeforeAndAfterE
    it("should write a file with string data to disk"){
      val content =
        """
-         |User data
-         |of multiple
-         |lines
+         |name,lastname,age
+         |Maria,Willis,36
+         |Benito,Jackson,28
          |""".stripMargin
 
-     val testFile = wd / "dir1" / "test_data4.txt"
+     val testFile = wd / "dir1" / "test_data4.csv"
      hio.write(testFile, content)
      val result = hio.ls(testFile)
      assert(result.contains(testFile.toString))
@@ -130,8 +131,16 @@ class FSOpsSpec extends FunSpec with FileContextTestWrapper with BeforeAndAfterE
       val filePath = wd / "dir1"
       hio.remove.all(filePath)
       val result = hio.ls(wd)
-      println(hio.ls(wd))
       assert(!result.contains(filePath.toString))
+    }
+
+    it("should fail to remove a folder that have sub folders") {
+      val filePath = wd / "dir1"
+      val errorMessage = intercept[IOException]{
+        hio.remove(filePath)
+      }.getMessage
+
+      assert(errorMessage.contains(s"Directory ${filePath.relativePath.toString} is not empty"))
     }
 
     it("should remove all txt files from a folder using wildcard"){
