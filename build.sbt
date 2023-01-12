@@ -14,7 +14,7 @@ libraryDependencies += "org.scalatest" %% "scalatest" % "3.0.1" % "test"
 libraryDependencies += "com.lihaoyi" %% "os-lib" % "0.7.1" % "test"
 libraryDependencies += "org.apache.hadoop" % "hadoop-aws" % "3.3.1"
 libraryDependencies += "org.apache.hadoop" % "hadoop-azure" % "3.3.1"
-libraryDependencies += "com.github.pureconfig" %% "pureconfig" % "0.17.1"
+libraryDependencies += "com.microsoft.azure" % "azure-data-lake-store-sdk" % "2.3.10"
 
 // test suite settings
 fork in Test := true

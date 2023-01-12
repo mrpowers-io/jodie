@@ -241,7 +241,20 @@ for authentication, you can use environment variables or provide an xml config f
     * [Hadoop General](https://hadoop.apache.org/docs/r3.2.1/hadoop-project-dist/hadoop-common/AdminCompatibilityGuide.html#XML_Configuration_Files)  
     * [AWS](https://hadoop.apache.org/docs/stable/hadoop-aws/tools/hadoop-aws/index.html#Authentication_properties)
     * [AZURE](https://hadoop.apache.org/docs/stable/hadoop-azure/index.html#Configuring_Credentials)
-  * And set the environment variable CONFIG_PATH with the file path where the configuration file is stored
+  * And set the environment variable **CONFIG_PATH** with the file path where the configuration file is stored
+  * S3 Example: 
+    ```xml
+    <configuration>
+      <property>
+          <name>fs.s3a.access.key</name>
+          <value>AWS access key ID</value>
+      </property>
+      <property>
+          <name>fs.s3a.secret.key</name>
+          <value>AWS secret key</value>
+      </property>
+    </configuration>
+    ```
 * Environment Variables
   * AWS
     * AWS_ACCESS_KEY_ID
@@ -261,7 +274,7 @@ hio.mkdir(root / "path/to/folder")
 ```
 
 ### List Files/Folders
-Recursively walks the given folder and returns the paths of every file or folder within. 
+The function search in the given folder and returns the paths of every file or folder within it. 
 It also supports searching given a wildcard. 
 
 ```scala
@@ -282,9 +295,24 @@ ArraySeq(
   "s3a://bucket_name/path/to/folders/new_folder")
 ```
 
+Note that if you use the wildcard function with only a directory you will not get all the files and folders within it,
+instead it will return only the given folder. e.g: 
+
+```scala
+val wd = hio.Path("s3a://bucket_name/path/to/folders")
+hio.ls.withWildCard(wd)
+```
+
+returns 
+
+```scala
+ArraySeq("s3a://bucket_name/path/to/folders")
+```
+
+
 ### Delete Files/Folders 
-The function `remove` permanently deletes files or folders from a filesystem/object store, it also possible 
-to recursively deletes sub-folders/files using `remove.all`.
+The function `remove` permanently deletes files or folders from a filesystem/object store. It is also possible 
+to recursively deletes sub-folders/files using `remove.all`. e.g:
 
 ```scala
 val filePath = hio.Path("s3a://bucket_name/path/to/file")
@@ -296,8 +324,40 @@ val folderPath = hio.Path("s3a://bucket_name/path/to/folder")
 hio.remove.all(folderPath)
 ```
 
+### Copy Files
+The function `copy` creates a copy of the files in the source folder in the destination folder. It is also possible 
+to use this function with wild card `copy.withWildCard`. e.g:
+
+```scala
+val src = hio.Path("s3a://bucket_name/path/to/src")
+val dest = hio.Path("s3a://bucket_name/path/to/dest")
+hio.copy(src,dest)
+```
+or use it with wildcard
+```scala
+val src = hio.Path("s3a://bucket_name/path/to/src/*.parquet")
+val dest = hio.Path("s3a://bucket_name/path/to/dest")
+hio.copy.withWildCard(src,dest)
+```
+
+### Move Files
+The function `move` creates a copy of the files in the source folder in the destination folder and remove the files 
+from the source folder. It is also possible to use this function with wild card `move.withWildCard`. e.g:
+
+```scala
+val src = hio.Path("s3a://bucket_name/path/to/src")
+val dest = hio.Path("s3a://bucket_name/path/to/dest")
+hio.move(src,dest)
+```
+or use it with wildcard
+```scala
+val src = hio.Path("s3a://bucket_name/path/to/src/*.parquet")
+val dest = hio.Path("s3a://bucket_name/path/to/dest")
+hio.move.withWildCard(src,dest)
+```
+
 ### Create Files
-This function creates a file in a filesystem from an array of bytes or a string. To create the file
+This function `write` creates a file in a filesystem from an array of bytes or a string. To create the file
 the folder must exist.
 
 ```scala

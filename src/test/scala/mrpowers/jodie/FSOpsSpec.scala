@@ -4,6 +4,7 @@ import org.apache.commons.io.IOUtils
 import org.scalatest.{BeforeAndAfterEach, FunSpec}
 
 import java.io.{ByteArrayOutputStream, IOException, ObjectOutputStream}
+import scala.collection.mutable
 
 class FSOpsSpec extends FunSpec with FileContextTestWrapper with BeforeAndAfterEach {
   override protected def afterEach(): Unit = {
@@ -14,17 +15,19 @@ class FSOpsSpec extends FunSpec with FileContextTestWrapper with BeforeAndAfterE
     hio.mkdir(wd / "dir1")
     hio.mkdir(wd / "dir2")
     hio.mkdir(wd / "dir3")
-    hio.mkdir(wd / "dir1" / "dir4")
+    hio.mkdir(wd / "dir1" / "dir4" / "dir5")
+    hio.mkdir(wd / "dir6")
     hio.write(wd / "dir1/test_data1.txt", "hola1")
     hio.write(wd / "dir1/test_data2.txt", "hola2")
     hio.write(wd / "dir1/test_data3.txt", "hola3")
+    hio.write(wd / "dir6/test_data6.txt", "hola6")
   }
 
   describe("list files/folders operations"){
 
     it("should list all the existing folders in a path"){
       val result = hio.ls(wd)
-      val expected = List((wd/"dir1").toString,(wd/"dir2").toString,(wd/"dir3").toString)
+      val expected = List((wd/"dir1").toString,(wd/"dir2").toString,(wd/"dir3").toString,(wd/"dir6").toString)
       assert(result.sorted==expected)
     }
 
@@ -142,10 +145,6 @@ class FSOpsSpec extends FunSpec with FileContextTestWrapper with BeforeAndAfterE
 
       assert(errorMessage.contains(s"Directory ${filePath.relativePath.toString} is not empty"))
     }
-
-    it("should remove all txt files from a folder using wildcard"){
-      //todo: could be implemented using hio.ls.wildcard + hio.remove but is going to be slow
-    }
   }
 
   describe("Read the content of a file into memory"){
@@ -162,5 +161,181 @@ class FSOpsSpec extends FunSpec with FileContextTestWrapper with BeforeAndAfterE
       val result = hio.read.string(filePath)
       assert(result == "hola2")
     }
+  }
+
+  describe("copy files"){
+
+    it("should copy file to an existing empty folder"){
+      val src = wd / "dir1/test_data1.txt"
+      val dest = wd / "dir3/"
+      hio.copy(src,dest)
+      val result = hio.ls(dest )
+      assertResult(Seq((dest / "test_data1.txt").toString))(result)
+    }
+
+    it("should copy a file when the file already exist in the destination"){
+      val src = wd / "dir1/test_data1.txt"
+      val dest = wd / "dir3/test_data1.txt"
+      hio.write(dest, "abcd")
+      hio.copy(src, dest,overWrite = true)
+      val result = hio.ls(dest)
+      assertResult(Seq(dest.toString))(result)
+    }
+
+    it("should fail to copy a file when the file already exist in the destination"){
+      val src = wd / "dir1/test_data1.txt"
+      val dest = wd / "dir3/test_data1.txt"
+      hio.write(dest, "abcd")
+      val errorMessage = intercept[IOException]{
+        hio.copy(src, dest)
+      }.getMessage
+      assertResult(s"Target ${dest.path.toString}/${src.lastName} already exists")(errorMessage)
+    }
+
+    it("should copy all the files from an origin folder into a destination"){
+      val src = wd / "dir1/*.txt"
+      val dest = wd / "dir3/"
+      hio.copy.withWildCard(src,dest)
+      val result = hio.ls(dest)
+      val expectedResult = mutable.ArraySeq((dest / "test_data1.txt").toString, (dest / "test_data3.txt").toString, (dest / "test_data2.txt").toString)
+      assertResult(expectedResult)(result)
+    }
+
+    it("should fail to copy a folder content into a file"){
+      val src = wd / "dir1/"
+      val dest = wd / "dir3/test_data.txt"
+      val errorMessage = intercept[JodieValidationError]{
+        hio.copy(src,dest)
+      }.getMessage
+      assertResult(s"can't copy all the files of directory ${src.toString} into a single file ${dest.toString}.")(errorMessage)
+    }
+
+    it("should fail to copy multiples files using wildcard into a file") {
+      val src = wd / "dir1/*.txt"
+      val dest = wd / "dir3/test_data.txt"
+      val errorMessage = intercept[JodieValidationError]{
+        hio.copy.withWildCard(src,dest)
+      }.getMessage
+      assertResult(s"can't copy all the files of ${src.toString} into a single file ${dest.toString}.")(errorMessage)
+    }
+
+    it("should copy a file into a target file when using wildcard and the search result return one file") {
+      val src = wd / "dir6/*.txt"
+      val dest = wd / "dir3/test_data.txt"
+      hio.copy.withWildCard(src,dest)
+      val resultPath = hio.ls(dest)
+      assertResult(List(dest.toString))(resultPath)
+    }
+
+    it("should copy from a local filesystem to a s3 object store"){
+     /* val src = wd / "dir1/test_data2.txt"
+      val dest = hio.JodiePath("s3a://hdfs-fs-test/")
+      hio.copy(src, dest,overWrite = true)
+      val result = hio.ls(dest / "test_data2.txt")
+      val expected = Seq((dest / "test_data2.txt").toString)
+      assertResult(expected)(result)*/
+      //TODO: It works with my personal aws credentials but it should be an integration test
+    }
+
+    it("should copy from a local filesystem to a s3 object store using wildcard") {
+
+     // val src = wd / "dir1/*.txt"
+     // val dest = hio.JodiePath("s3a://hdfs-fs-test/")
+     // hio.copy.withWildCard(src, dest,overWrite = true)
+     // val result = hio.ls.withWildCard(dest / "*.txt")
+     // val expected = Seq((dest/"test_data1.txt").toString,(dest/"test_data2.txt").toString,(dest/"test_data3.txt").toString)
+     // assertResult(expected)(result)
+     // It works with my personal aws credentials but this should converted into an integration test
+    }
+  }
+
+  describe("move files"){
+    it("should move file successfully when source is a file and destination is a folder"){
+      val src = wd / "dir1/test_data1.txt"
+      val dest = wd / "dir3/"
+      hio.move(src,dest)
+      val destResult = hio.ls(dest)
+      val errorMessage = intercept[JodieValidationError]{
+        hio.ls(src)
+      }.getMessage
+      assertResult(Seq((dest / "test_data1.txt").toString))(destResult)
+      assertResult(s"The Path ${src.toString} does not exists")(errorMessage)
+    }
+
+    it("should move file successfully when source is a file and destination is a file"){
+      val src = wd / "dir1/test_data1.txt"
+      val dest = wd / "dir3/test_data1.txt"
+      hio.move(src,dest)
+      val destResult = hio.ls(dest)
+      val errorMessage = intercept[JodieValidationError] {
+        hio.ls(src)
+      }.getMessage
+      assertResult(Seq(dest.toString))(destResult)
+      assertResult(s"The Path ${src.toString} does not exists")(errorMessage)
+    }
+
+    it("should move files successfully when source is a folder and destination is a folder") {
+      val src = wd / "dir1/"
+      val dest = wd / "dir3/"
+      hio.move(src,dest)
+      val destResult = hio.ls(dest)
+      val srcResult = hio.ls.status(src)
+      val destExpected = Seq((dest / "test_data1.txt").toString,(dest / "test_data3.txt").toString,(dest / "test_data2.txt").toString)
+      assertResult(destExpected)(destResult)
+      assert(srcResult.forall(f => f.isDirectory))
+    }
+
+    it("should fail to move files when source is a folder and destination is a file") {
+      val src = wd / "dir1/"
+      val dest = wd / "dir3/data_file.txt"
+      val errorMessage = intercept[JodieValidationError]{
+        hio.move(src,dest)
+      }.getMessage
+      assertResult(s"can't move all the files of directory ${src.toString} into a single file ${dest.toString}.")(errorMessage)
+    }
+
+    it("should fail to move files when using wildcard and source are multiple files and destination is a file") {
+      val src = wd / "dir1/*.txt"
+      val dest = wd / "dir3/data_file.txt"
+      val errorMessage = intercept[JodieValidationError] {
+        hio.move.withWildCard(src, dest)
+      }.getMessage
+      assertResult(s"can't move all the files of ${src.toString} into a single file ${dest.toString}.")(errorMessage)
+    }
+
+    it("should move files successfully when using wildcard and source is a file and destination is a file") {
+      val src = wd / "dir6/*.txt"
+      val dest = wd / "dir3/data_file.txt"
+      hio.move.withWildCard(src,dest)
+      val srcResult = hio.ls.withWildCard(src)
+      val destResult = hio.ls(dest)
+      assert(srcResult.isEmpty)
+      assert(destResult.nonEmpty)
+    }
+
+    it("should move from a local filesystem to a s3 object store using wildcard") {
+      //val src = wd / "dir1/*.txt"
+      //val dest = hio.JodiePath("s3a://hdfs-fs-test/")
+      //hio.move.withWildCard(src, dest, overWrite = true)
+      //val srcResult = hio.ls.withWildCard(src)
+      //val destResult = hio.ls.withWildCard(dest / "*.txt")
+      //val expected = Seq((dest/"test_data1.txt").toString,(dest/"test_data2.txt").toString,(dest/"test_data3.txt").toString)
+      //assertResult(expected)(destResult)
+      //assert(srcResult.isEmpty)
+      // It works with my personal aws credentials but it should be an integration test
+    }
+
+
+    it("should move files successfully when using wildcard and source are multiple files and destination is a folder") {
+      val src = wd / "dir1/*.txt"
+      val dest = wd / "dir3"
+      hio.move.withWildCard(src,dest)
+      val srcResult = hio.ls.withWildCard(src)
+      val destResult = hio.ls(dest)
+      val expected = Seq((dest/"test_data1.txt").toString,(dest/"test_data3.txt").toString,(dest/"test_data2.txt").toString)
+      assert(srcResult.isEmpty)
+      assertResult(expected)(destResult)
+    }
+
   }
 }
