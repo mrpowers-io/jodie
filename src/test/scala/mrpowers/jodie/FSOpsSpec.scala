@@ -198,7 +198,7 @@ class FSOpsSpec extends FunSpec with FileContextTestWrapper with BeforeAndAfterE
       hio.copy.withWildCard(src,dest)
       val result = hio.ls(dest)
       val expectedResult = mutable.ArraySeq((dest / "test_data1.txt").toString, (dest / "test_data3.txt").toString, (dest / "test_data2.txt").toString)
-      assertResult(expectedResult)(result)
+      assertResult(expectedResult.sorted)(result.sorted)
     }
 
     it("should fail to copy a folder content into a file"){
@@ -281,7 +281,7 @@ class FSOpsSpec extends FunSpec with FileContextTestWrapper with BeforeAndAfterE
       val destResult = hio.ls(dest)
       val srcResult = hio.ls.status(src)
       val destExpected = Seq((dest / "test_data1.txt").toString,(dest / "test_data3.txt").toString,(dest / "test_data2.txt").toString)
-      assertResult(destExpected)(destResult)
+      assertResult(destExpected.sorted)(destResult.sorted)
       assert(srcResult.forall(f => f.isDirectory))
     }
 
@@ -334,7 +334,7 @@ class FSOpsSpec extends FunSpec with FileContextTestWrapper with BeforeAndAfterE
       val destResult = hio.ls(dest)
       val expected = Seq((dest/"test_data1.txt").toString,(dest/"test_data3.txt").toString,(dest/"test_data2.txt").toString)
       assert(srcResult.isEmpty)
-      assertResult(expected)(destResult)
+      assertResult(expected.sorted)(destResult.sorted)
     }
 
   }
