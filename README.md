@@ -233,6 +233,21 @@ HiveViewHelpers.createOrReplaceHiveView(viewName = "students",deltaPath = "file:
 
 Note that this function will create the hive view based on a specific version of the delta table. 
 
+### Get Table Type
+The function `getTableType` return the table type(Managed, External or Non-registered) of a given table name. The
+return type is a enum value containing the label string.
+
+Here's how to use the function:
+```scala
+HiveViewHelpers.getTableType(tableName = "students")
+```
+The result will be an HiveTableType:
+
+```scala
+HiveTableType.EXTERNAL(label = "EXTERNAL")
+```
+
+
 ## HDFS Operations
 ### Configuration
 for authentication, you can use environment variables or provide an xml config file:

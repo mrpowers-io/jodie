@@ -6,6 +6,7 @@ version := "0.0.1"
 scalaVersion := "2.12.12"
 
 libraryDependencies += "org.apache.spark" %% "spark-sql" % "3.3.1" % "provided"
+libraryDependencies += "org.apache.spark" %% "spark-hive" % "3.3.1" % "provided"
 
 libraryDependencies += "io.delta" %% "delta-core" % "2.1.0" % "provided"
 libraryDependencies += "com.github.mrpowers" %% "spark-daria" % "0.38.2"
