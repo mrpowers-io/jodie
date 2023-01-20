@@ -2,7 +2,7 @@ package mrpowers.jodie
 
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 
-object HiveViewHelpers {
+object HiveHelpers {
 
   def createOrReplaceHiveView(viewName: String, deltaPath: String, deltaVersion: Long): Unit = {
     val query = s"""
@@ -18,11 +18,28 @@ object HiveViewHelpers {
          | DESCRIBE FORMATTED $tableName
          |""".stripMargin
     try {
-      val df = SparkSession.active.sql(query).select("data_type").filter("col_name = 'Type'")
-      df.collect().head.getString(0) match {
-        case HiveTableType.MANAGED.label => HiveTableType.MANAGED
-        case HiveTableType.EXTERNAL.label => HiveTableType.EXTERNAL
+
+      val df = SparkSession.active.sql(query).select("data_type","col_name").cache()
+      val providerDF = df.filter("lower(col_name) = 'provider'")
+      val providerStr = providerDF.collect().head.getString(0)
+      providerStr match {
+        case "delta" =>
+          val typeDF = df.filter("lower(col_name) = 'external' and lower(data_type) = 'true'")
+          val isTableTypeExternal = typeDF.collect().nonEmpty
+          if (isTableTypeExternal) {
+            HiveTableType.EXTERNAL
+          } else {
+            HiveTableType.MANAGED
+          }
+        case _ =>
+          val typeDF = df.filter("col_name = 'Type'")
+          val tableTypeStr = typeDF.collect().head.getString(0)
+          tableTypeStr match {
+            case HiveTableType.MANAGED.label => HiveTableType.MANAGED
+            case HiveTableType.EXTERNAL.label => HiveTableType.EXTERNAL
+          }
       }
+
     } catch {
       case e: AnalysisException
         if e.getMessage().toLowerCase().contains("table or view not found") => HiveTableType.NONREGISTERED
