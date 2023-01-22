@@ -228,7 +228,7 @@ of the delta table, meaning that it will be like coping the table to a view not 
 
 Here's how to use the function:
 ```scala
-HiveViewHelpers.createOrReplaceHiveView(viewName = "students",deltaPath = "file:/path/to/your/delta-lake/table",deltaVersion = 100L)
+HiveHelpers.createOrReplaceHiveView(viewName = "students",deltaPath = "file:/path/to/your/delta-lake/table",deltaVersion = 100L)
 ```
 
 Note that this function will create the hive view based on a specific version of the delta table. 
@@ -239,7 +239,7 @@ return type is a enum value containing the label string.
 
 Here's how to use the function:
 ```scala
-HiveViewHelpers.getTableType(tableName = "students")
+HiveHelpers.getTableType(tableName = "students")
 ```
 The result will be an HiveTableType:
 
@@ -247,6 +247,18 @@ The result will be an HiveTableType:
 HiveTableType.EXTERNAL(label = "EXTERNAL")
 ```
 
+### Register a Delta table to Hive
+The function `registerTable` adds metadata information of a delta table to the Hive metastore, 
+this enables it to be queried.
+
+Here is how to use the function:
+```scala
+HiveHelpers.registerTable(tableName = "students",tableLoc = "file:/path/to/your/delta-lake/table")
+```
+after that you would be able to query, i.e:
+```scala
+SparkSession.active.sql("select * from students").show
+```
 
 ## HDFS Operations
 ### Configuration

@@ -1,5 +1,7 @@
 package mrpowers.jodie
 
+import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
+import org.apache.spark.sql.delta.DeltaAnalysisException
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 
 object HiveHelpers {
@@ -43,6 +45,18 @@ object HiveHelpers {
     } catch {
       case e: AnalysisException
         if e.getMessage().toLowerCase().contains("table or view not found") => HiveTableType.NONREGISTERED
+    }
+  }
+
+  def registerTable(tableName:String, tablePath:String):Unit = {
+    if(tablePath.isEmpty || tableName.isEmpty){
+      throw JodieValidationError("tableName and tablePath input parameters must not be empty")
+    }
+    try{
+      SparkSession.active.sql(s"CREATE TABLE $tableName using delta location '$tablePath'")
+    }catch {
+      case e:DeltaAnalysisException => throw JodieValidationError(s"table:$tableName location:$tablePath is not a delta table")
+      case e:TableAlreadyExistsException => throw JodieValidationError(s"table:$tableName already exits")
     }
   }
 

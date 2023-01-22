@@ -1,7 +1,7 @@
 package mrpowers.jodie
 
 import mrpowers.jodie.HiveHelpers.HiveTableType
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.scalatest.{BeforeAndAfterEach, FunSpec}
 
 class HiveHelperSpec extends FunSpec with SparkSessionTestWrapper with BeforeAndAfterEach{
@@ -78,4 +78,64 @@ class HiveHelperSpec extends FunSpec with SparkSessionTestWrapper with BeforeAnd
         assertResult(expected)(result)
       }
     }
+
+  describe("Register a table to hive"){
+    it("should register a delta table to hive"){
+      val df = List("1", "2", "3").toDF
+      val tmpDir = os.pwd / "tmp"
+      val tableName = "num_table"
+      val tableLoc = (tmpDir / tableName).toString()
+      df.write
+        .format("delta")
+        .save(tableLoc)
+      assertThrows[AnalysisException] {
+        spark.sql(s"DESCRIBE table $tableName")
+      }
+      HiveHelpers.registerTable(tableName, tableLoc)
+      val dfDescribe = spark.sql(s"DESCRIBE table EXTENDED $tableName")
+
+      assert(dfDescribe.count() > 0)
+    }
+
+    it("should fail to register non-delta table to hive"){
+      val df = List("1", "2", "3").toDF
+      val tmpDir = os.pwd / "tmp"
+      val tableName = "num_table"
+      val tableLoc = (tmpDir / tableName).toString()
+      df.write
+        .format("parquet")
+        .save(tableLoc)
+      val errorMessage = intercept[JodieValidationError]{
+        HiveHelpers.registerTable(tableName,tableLoc)
+      }.getMessage
+      val expected = s"table:$tableName location:$tableLoc is not a delta table"
+      assertResult(expected)(errorMessage)
+    }
+
+    it("should fail to register an already registered table to hive") {
+      val df = List("1", "2", "3").toDF
+      val tmpDir = os.pwd / "tmp"
+      val tableName = "num_table"
+      val tableLoc = (tmpDir / tableName).toString()
+      df.write
+        .format("delta")
+        .saveAsTable(tableName)
+
+      val errorMessage = intercept[JodieValidationError]{
+        HiveHelpers.registerTable(tableName, tableLoc)
+      }.getMessage
+      val expected = s"table:$tableName already exits"
+      assertResult(expected)(errorMessage)
+    }
+
+    it("should fail to register when the file path is empty"){
+      val tableName = "num_table"
+      val tableLoc = ""
+      val errorMessage = intercept[JodieValidationError]{
+        HiveHelpers.registerTable(tableName, tableLoc)
+      }.getMessage
+      val expected = "tableName and tablePath input parameters must not be empty"
+      assertResult(expected)(errorMessage)
+    }
+  }
 }
