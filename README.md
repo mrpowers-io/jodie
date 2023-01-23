@@ -412,6 +412,11 @@ val wd = hio.Path("s3a://bucket_name/path/to/folders")
 hio.read.string(wd / "file_1.txt")
 ```
 
+## Project maintainers
+
+* Matthew Powers aka [MrPowers](https://github.com/MrPowers)
+* Brayan Jules aka [brayanjuls](https://github.com/brayanjuls)
+
 ## More about Jodie
 
 See [this video](https://www.youtube.com/watch?v=llHKvaV0scQ) for more info about the awesomeness of Jodie!
