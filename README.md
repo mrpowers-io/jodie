@@ -247,13 +247,13 @@ The result will be an HiveTableType:
 HiveTableType.EXTERNAL(label = "EXTERNAL")
 ```
 
-### Register a Delta table to Hive
-The function `registerTable` adds metadata information of a delta table to the Hive metastore, 
+### Register a Parquet or Delta table to Hive
+The function `registerTable` adds metadata information of a parquet or delta table to the Hive metastore, 
 this enables it to be queried.
 
 Here is how to use the function:
 ```scala
-HiveHelpers.registerTable(tableName = "students",tableLoc = "file:/path/to/your/delta-lake/table")
+HiveHelpers.registerTable(tableName = "students",tableLoc = "file:/path/to/your/table", provider = HiveProvider.DELTA)
 ```
 after that you would be able to query, i.e:
 ```scala

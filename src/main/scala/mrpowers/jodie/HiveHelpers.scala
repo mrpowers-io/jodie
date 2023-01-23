@@ -48,12 +48,17 @@ object HiveHelpers {
     }
   }
 
-  def registerTable(tableName:String, tablePath:String):Unit = {
+  def registerTable(tableName:String, tablePath:String, provider:HiveProvider = HiveProvider.DELTA):Unit = {
     if(tablePath.isEmpty || tableName.isEmpty){
       throw JodieValidationError("tableName and tablePath input parameters must not be empty")
     }
     try{
-      SparkSession.active.sql(s"CREATE TABLE $tableName using delta location '$tablePath'")
+      if(provider == HiveProvider.DELTA){
+        SparkSession.active.sql(s"CREATE TABLE $tableName using delta location '$tablePath'")
+      }else{
+        SparkSession.active.catalog.createTable(tableName,tablePath)
+      }
+
     }catch {
       case e:DeltaAnalysisException => throw JodieValidationError(s"table:$tableName location:$tablePath is not a delta table")
       case e:TableAlreadyExistsException => throw JodieValidationError(s"table:$tableName already exits")
@@ -61,6 +66,13 @@ object HiveHelpers {
   }
 
   sealed abstract class HiveTableType(val label: String)
+
+  sealed abstract class HiveProvider(val label: String)
+
+  object HiveProvider{
+    final case object DELTA extends HiveProvider(label = "delta")
+    final case object PARQUET extends HiveProvider(label = "parquet")
+  }
 
   object HiveTableType {
     final case object MANAGED extends HiveTableType(label = "MANAGED")

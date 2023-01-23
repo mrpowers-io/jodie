@@ -93,11 +93,10 @@ class HiveHelperSpec extends FunSpec with SparkSessionTestWrapper with BeforeAnd
       }
       HiveHelpers.registerTable(tableName, tableLoc)
       val dfDescribe = spark.sql(s"DESCRIBE table EXTENDED $tableName")
-
       assert(dfDescribe.count() > 0)
     }
 
-    it("should fail to register non-delta table to hive"){
+    it("should register parquet table to hive"){
       val df = List("1", "2", "3").toDF
       val tmpDir = os.pwd / "tmp"
       val tableName = "num_table"
@@ -105,11 +104,9 @@ class HiveHelperSpec extends FunSpec with SparkSessionTestWrapper with BeforeAnd
       df.write
         .format("parquet")
         .save(tableLoc)
-      val errorMessage = intercept[JodieValidationError]{
-        HiveHelpers.registerTable(tableName,tableLoc)
-      }.getMessage
-      val expected = s"table:$tableName location:$tableLoc is not a delta table"
-      assertResult(expected)(errorMessage)
+      HiveHelpers.registerTable(s"$tableName",tableLoc,HiveHelpers.HiveProvider.PARQUET)
+      val dfDescribe = SparkSession.active.sql(s"describe extended $tableName")
+      assert(dfDescribe.count()>0)
     }
 
     it("should fail to register an already registered table to hive") {
@@ -135,6 +132,21 @@ class HiveHelperSpec extends FunSpec with SparkSessionTestWrapper with BeforeAnd
         HiveHelpers.registerTable(tableName, tableLoc)
       }.getMessage
       val expected = "tableName and tablePath input parameters must not be empty"
+      assertResult(expected)(errorMessage)
+    }
+
+    it("should fail when the wrong provider is specified"){
+      val df = List("1", "2", "3").toDF
+      val tmpDir = os.pwd / "tmp"
+      val tableName = "num_table"
+      val tableLoc = (tmpDir / tableName).toString()
+      df.write
+        .format("parquet")
+        .save(tableLoc)
+      val errorMessage = intercept[JodieValidationError]{
+        HiveHelpers.registerTable(s"$tableName",tableLoc,HiveHelpers.HiveProvider.DELTA)
+      }.getMessage
+      val expected = s"table:$tableName location:$tableLoc is not a delta table"
       assertResult(expected)(errorMessage)
     }
   }
