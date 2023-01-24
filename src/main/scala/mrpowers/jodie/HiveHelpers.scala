@@ -15,36 +15,17 @@ object HiveHelpers {
   }
 
   def getTableType(tableName: String): HiveTableType = {
-    val query =
-      s"""
-         | DESCRIBE FORMATTED $tableName
-         |""".stripMargin
     try {
 
-      val df = SparkSession.active.sql(query).select("data_type","col_name").cache()
-      val providerDF = df.filter("lower(col_name) = 'provider'")
-      val providerStr = providerDF.collect().head.getString(0)
-      providerStr match {
-        case "delta" =>
-          val typeDF = df.filter("lower(col_name) = 'external' and lower(data_type) = 'true'")
-          val isTableTypeExternal = typeDF.collect().nonEmpty
-          if (isTableTypeExternal) {
-            HiveTableType.EXTERNAL
-          } else {
-            HiveTableType.MANAGED
-          }
-        case _ =>
-          val typeDF = df.filter("col_name = 'Type'")
-          val tableTypeStr = typeDF.collect().head.getString(0)
-          tableTypeStr match {
-            case HiveTableType.MANAGED.label => HiveTableType.MANAGED
-            case HiveTableType.EXTERNAL.label => HiveTableType.EXTERNAL
-          }
-      }
+      val table = SparkSession.active.catalog.getTable(tableName)
 
+      table.tableType.toUpperCase() match {
+        case HiveTableType.MANAGED.label => HiveTableType.MANAGED
+        case HiveTableType.EXTERNAL.label => HiveTableType.EXTERNAL
+      }
     } catch {
       case e: AnalysisException
-        if e.getMessage().toLowerCase().contains("table or view not found") => HiveTableType.NONREGISTERED
+        if e.getMessage().toLowerCase().contains(s"table or view '$tableName' not found") => HiveTableType.NONREGISTERED
     }
   }
 
