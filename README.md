@@ -221,6 +221,27 @@ The result table will be the following:
 +----+---------+---------+
 ```
 
+## How to contribute
+We welcome contributions to this project, to contribute checkout our [CONTRIBUTING.md](CONTRIBUTING.md) file.
+
+## How to build the project
+
+### pre-requisites
+* SBT 1.8.2
+* Java 8
+* Scala 2.12.12
+
+### Building
+
+To compile, run
+`sbt compile`
+
+To test, run
+`sbt test`
+
+To generate artifacts, run
+`sbt package`
+
 ## Project maintainers
 
 * Matthew Powers aka [MrPowers](https://github.com/MrPowers)
