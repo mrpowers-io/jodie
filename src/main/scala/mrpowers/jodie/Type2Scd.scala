@@ -6,13 +6,13 @@ import io.delta.tables._
 object Type2Scd {
 
   def upsert(
-      path: String,
+      table: DeltaTable,
       updatesDF: DataFrame,
       primaryKey: String,
       attrColNames: Seq[String]
   ): Unit = {
     genericUpsert(
-      path,
+      table,
       updatesDF,
       primaryKey,
       attrColNames,
@@ -23,7 +23,7 @@ object Type2Scd {
   }
 
   def genericUpsert(
-      path: String,
+      baseTable: DeltaTable,
       updatesDF: DataFrame,
       primaryKey: String,
       attrColNames: Seq[String],
@@ -31,7 +31,6 @@ object Type2Scd {
       effectiveTimeColName: String,
       endTimeColName: String
   ): Unit = {
-    val baseTable = DeltaTable.forPath(SparkSession.active, path)
     // validate the existing Delta table
     val baseColNames = baseTable.toDF.columns.toSeq
     val requiredBaseColNames =
