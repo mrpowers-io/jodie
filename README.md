@@ -40,7 +40,7 @@ You'd like to perform an upsert with this data:
 Here's how to perform the upsert:
 
 ```scala
-Type2Scd.upsert(path, updatesDF, "pkey", Seq("attr1", "attr2"))
+Type2Scd.upsert(deltaTable, updatesDF, "pkey", Seq("attr1", "attr2"))
 ```
 
 Here's the table after the upsert:
