@@ -1,14 +1,15 @@
 package mrpowers.jodie
 
-import org.scalatest.{BeforeAndAfterEach, FunSpec}
+import org.scalatest.BeforeAndAfterEach
 import java.sql.{Date, Timestamp}
 
 import com.github.mrpowers.spark.daria.sql.SparkSessionExt.SparkSessionMethods
 import com.github.mrpowers.spark.fast.tests.DataFrameComparer
 import org.apache.spark.sql.types._
+import org.scalatest.funspec.AnyFunSpec
 
 class Type2ScdSpec
-    extends FunSpec
+    extends AnyFunSpec
     with SparkSessionTestWrapper
     with BeforeAndAfterEach
     with DataFrameComparer {
