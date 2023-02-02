@@ -9,8 +9,8 @@ libraryDependencies += "org.apache.spark" %% "spark-sql" % "3.3.1" % "provided"
 
 libraryDependencies += "io.delta" %% "delta-core" % "2.1.0" % "provided"
 libraryDependencies += "com.github.mrpowers" %% "spark-daria" % "0.38.2" % "test"
-libraryDependencies += "com.github.mrpowers" %% "spark-fast-tests" % "1.0.0" % "test"
-libraryDependencies += "org.scalatest" %% "scalatest" % "3.0.1" % "test"
+libraryDependencies += "com.github.mrpowers" %% "spark-fast-tests" % "1.3.0" % "test"
+libraryDependencies += "org.scalatest" %% "scalatest" % "3.2.15" % "test"
 libraryDependencies += "com.lihaoyi" %% "os-lib" % "0.7.1" % "test"
 
 // test suite settings
