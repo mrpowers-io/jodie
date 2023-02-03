@@ -5,6 +5,8 @@ import io.delta.tables._
 import org.apache.spark.sql.expressions.Window.partitionBy
 import org.apache.spark.sql.functions.{col, count, row_number}
 
+import scala.util.Try
+
 object DeltaHelpers {
 
   /**
@@ -177,6 +179,30 @@ object DeltaHelpers {
       .whenNotMatched()
       .insertAll()
       .execute()
+  }
+
+  def findCompositeKeyCandidate(
+      deltaTable: DeltaTable,
+      excludeCols: Seq[String] = Nil
+  ): Seq[String] = {
+    val df = deltaTable.toDF
+
+    val cols      = df.columns.toSeq
+    val totalCols = cols.length
+    val totalRows = df.distinct().count()
+    val dfCleaned = df.drop(excludeCols: _*)
+
+    val compositeColumns = for {
+      i <- 1 to totalCols + 1
+      r <- dfCleaned.columns.combinations(i)
+      if dfCleaned.select(r.map(c => col(c)): _*).distinct().count() == totalRows
+      if r.length != totalCols
+    } yield r
+
+    if (compositeColumns.nonEmpty)
+      compositeColumns.head
+    else
+      Nil
   }
 
 }

@@ -221,6 +221,34 @@ The result table will be the following:
 +----+---------+---------+
 ```
 
+### Find Composite Key
+This function `findCompositeKeyCandidate` helps you find a composite key that uniquely identifies the rows your Delta table. 
+It returns a list of columns that can be used as a composite key. i.e:
+
+Suppose we have the following table:
+
+```
++----+---------+---------+
+|  id|firstname| lastname|
++----+---------+-----------+
+|   1|   Benito|  Jackson|
+|   4|    Maria|     Pitt|
+|   6|  Rosalia|     Pitt|
++----+---------+---------+
+```
+
+Now execute the function:
+```scala
+val result = DeltaHelpers.findCompositeKeyCandidate(deltaTable = deltaTable,excludeCols = Seq("id"))
+```
+
+The result will be the following:
+
+```scala
+Seq("firstname","lastname")
+```
+
+
 ## How to contribute
 We welcome contributions to this project, to contribute checkout our [CONTRIBUTING.md](CONTRIBUTING.md) file.
 

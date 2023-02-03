@@ -6,6 +6,8 @@ import io.delta.tables.DeltaTable
 import org.apache.spark.sql.types.{IntegerType, StringType}
 import org.scalatest.{BeforeAndAfterEach, FunSpec}
 
+import scala.util.{Failure, Success}
+
 class DeltaHelperSpec
     extends FunSpec
     with SparkSessionTestWrapper
@@ -490,5 +492,66 @@ class DeltaHelperSpec
       )
     }
 
+  }
+
+  describe("find composite key in a table"){
+    it("should not find the composite key in the table"){
+      val path = (os.pwd / "tmp" / "delta-tbl").toString()
+      Seq(
+        (1, "Benito", "Jackson"),
+        (2, "Maria", "Willis"),
+        (3, "Jose", "Travolta"),
+        (4, "Benito", "Jackson")
+      )
+        .toDF("id", "firstname", "lastname")
+        .write
+        .format("delta")
+        .mode("overwrite")
+        .save(path)
+
+      val deltaTable = DeltaTable.forPath(path)
+      val result = DeltaHelpers.findCompositeKeyCandidate(deltaTable,Seq("id"))
+
+      assertResult(Nil)(result)
+    }
+
+    it("should find the composite key in the table"){
+      val path = (os.pwd / "tmp" / "delta-tbl").toString()
+      Seq(
+        (1, "Benito", "Jackson"),
+        (2, "Maria", "Willis"),
+        (3, "Jose", "Travolta"),
+        (4, "Benito", "Willis")
+      )
+        .toDF("id", "firstname", "lastname")
+        .write
+        .format("delta")
+        .mode("overwrite")
+        .save(path)
+      val deltaTable = DeltaTable.forPath(path)
+      val result = DeltaHelpers.findCompositeKeyCandidate(deltaTable,Seq("id"))
+      val expected = Seq("firstname","lastname")
+      assertResult(expected)(result)
+    }
+
+    it("should find the composite key in the table when cols are excluded"){
+      val path = (os.pwd / "tmp" / "delta-tbl").toString()
+      Seq(
+        (1, "Benito", "Jackson"),
+        (2, "Maria", "Willis"),
+        (3, "Jose", "Travolta"),
+        (4, "Benito", "Willis")
+      )
+        .toDF("id", "firstname", "lastname")
+        .write
+        .format("delta")
+        .mode("overwrite")
+        .option("delta.logRetentionDuration", "interval 30 days")
+        .save(path)
+      val deltaTable = DeltaTable.forPath(path)
+      val result = DeltaHelpers.findCompositeKeyCandidate(deltaTable)
+      val expected = Seq("id")
+      assertResult(expected)(result)
+    }
   }
 }
