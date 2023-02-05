@@ -491,4 +491,60 @@ class DeltaHelperSpec
     }
 
   }
+
+  describe("Generate MD5 from columns") {
+    it("should generate a new md5 column from different columns of a dataframe") {
+      val df = Seq(
+        (1, "Benito", "Jackson"),
+        (2, "Maria", "Willis"),
+        (3, "Jose", "Travolta")
+      )
+        .toDF("id", "firstname", "lastname")
+
+      val resultDF = DeltaHelpers.withMD5Columns(df, List("firstname", "lastname"), "unique_column")
+      val expectedDF = Seq(
+        (1, "Benito", "Jackson", "3456d6842080e8188b35f515254fece8"),
+        (2, "Maria", "Willis", "4fd906b56cc15ca517c554b215597ea1"),
+        (3, "Jose", "Travolta", "3b3814001b13695931b6df8670172f91")
+      ).toDF("id", "firstname", "lastname", "unique_column")
+
+      assertSmallDataFrameEquality(
+        actualDF = resultDF,
+        expectedDF = expectedDF,
+        ignoreNullable = true,
+        orderedComparison = false
+      )
+    }
+
+    it("should generate a new md5 from different columns of a delta table") {
+      val path = (os.pwd / "tmp" / "delta-lake-inserts-no-dup").toString()
+      Seq(
+        (1, "Benito", "Jackson"),
+        (2, "Maria", "Willis"),
+        (3, "Jose", "Travolta")
+      )
+        .toDF("id", "firstname", "lastname")
+        .write
+        .format("delta")
+        .mode("overwrite")
+        .option("delta.logRetentionDuration", "interval 30 days")
+        .save(path)
+      val deltaTable = DeltaTable.forPath(path)
+      val resultDF =
+        DeltaHelpers.withMD5Columns(deltaTable, List("id", "firstname", "lastname"), "unique_id")
+
+      val expectedDF = Seq(
+        (1, "Benito", "Jackson", "cad17f15341ed95539e098444a4c8050"),
+        (2, "Maria", "Willis", "3e1e9709234c6250c74241d5886d5073"),
+        (3, "Jose", "Travolta", "1f1ac7f74f43eff911a92f7e28069271")
+      ).toDF("id", "firstname", "lastname", "unique_id")
+
+
+      assertSmallDataFrameEquality(
+        actualDF = resultDF,
+        expectedDF = expectedDF,
+        ignoreNullable = true,
+        orderedComparison = false)
+    }
+  }
 }
