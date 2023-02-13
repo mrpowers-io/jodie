@@ -170,10 +170,10 @@ object DeltaHelpers {
       throw new NoSuchElementException("The attribute primaryKeysColumns must not be empty")
 
     val mergeCondition = primaryKeysColumns.map(c => s"old.$c = new.$c").mkString(" AND ")
-
+    val appendDataCleaned = appendData.dropDuplicates(primaryKeysColumns)
     deltaTable
       .alias("old")
-      .merge(appendData.alias("new"), mergeCondition)
+      .merge(appendDataCleaned.alias("new"), mergeCondition)
       .whenNotMatched()
       .insertAll()
       .execute()
