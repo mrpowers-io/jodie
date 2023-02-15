@@ -415,6 +415,7 @@ class DeltaHelperSpec
         (4, "Maria", "Jackson"),
         (5, "Jose", "Travolta"),
         (6, "Gabriela", "Travolta"),
+        (8, "Gabriela", "Travolta"),
         (7, "Maria", "Pitt")
       )
         .toDF("id", "firstname", "lastname")
