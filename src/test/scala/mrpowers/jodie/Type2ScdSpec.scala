@@ -1,14 +1,15 @@
 package mrpowers.jodie
 
-import org.scalatest.{BeforeAndAfterEach, FunSpec}
+import org.scalatest.BeforeAndAfterEach
 import java.sql.{Date, Timestamp}
-
 import com.github.mrpowers.spark.daria.sql.SparkSessionExt.SparkSessionMethods
 import com.github.mrpowers.spark.fast.tests.DataFrameComparer
+import io.delta.tables.DeltaTable
 import org.apache.spark.sql.types._
+import org.scalatest.funspec.AnyFunSpec
 
 class Type2ScdSpec
-    extends FunSpec
+    extends AnyFunSpec
     with SparkSessionTestWrapper
     with BeforeAndAfterEach
     with DataFrameComparer {
@@ -45,7 +46,8 @@ class Type2ScdSpec
         (3, "C", Timestamp.valueOf("2020-09-15 00:00:00"))  // new value
       ).toDF("pkey", "attr", "effective_time")
       // perform upsert
-      Type2Scd.upsert(path, updatesDF, "pkey", Seq("attr"))
+      val table = DeltaTable.forPath(path)
+      Type2Scd.upsert(table, updatesDF, "pkey", Seq("attr"))
       // show result
       val res = spark.read.format("delta").load(path)
       val expected = Seq(
@@ -87,7 +89,8 @@ class Type2ScdSpec
       ).toDF("pkey", "attr", "effective_time")
       // perform upsert
       intercept[JodieValidationError] {
-        Type2Scd.upsert(path, updatesDF, "pkey", Seq("attr"))
+        val table = DeltaTable.forPath(path)
+        Type2Scd.upsert(table, updatesDF, "pkey", Seq("attr"))
       }
     }
 
@@ -115,7 +118,8 @@ class Type2ScdSpec
         (3, "C")  // new value
       ).toDF("pkey", "attr")
       intercept[JodieValidationError] {
-        Type2Scd.upsert(path, updatesDF, "pkey", Seq("attr"))
+        val table = DeltaTable.forPath(path)
+        Type2Scd.upsert(table, updatesDF, "pkey", Seq("attr"))
       }
     }
 
@@ -144,7 +148,8 @@ class Type2ScdSpec
         (3, "C", "C", Timestamp.valueOf("2020-09-15 00:00:00"))   // new value
       ).toDF("pkey", "attr1", "attr2", "effective_time")
       // perform upsert
-      Type2Scd.upsert(path, updatesDF, "pkey", Seq("attr1", "attr2"))
+      val table = DeltaTable.forPath(path)
+      Type2Scd.upsert(table, updatesDF, "pkey", Seq("attr1", "attr2"))
       val res = spark.read.format("delta").load(path)
       val expected = Seq(
         (
@@ -189,8 +194,9 @@ class Type2ScdSpec
         (3, "C", Date.valueOf("2020-09-15"))  // new value
       ).toDF("pkey", "attr", "effective_date")
       // perform upsert
+      val table = DeltaTable.forPath(path)
       Type2Scd.genericUpsert(
-        path,
+        table,
         updatesDF,
         "pkey",
         Seq("attr"),
@@ -225,8 +231,9 @@ class Type2ScdSpec
         (3, "C", 3)  // new value
       ).toDF("pkey", "attr", "effective_ver")
       // perform upsert
+      val table = DeltaTable.forPath(path)
       Type2Scd.genericUpsert(
-        path,
+        table,
         updatesDF,
         "pkey",
         Seq("attr"),

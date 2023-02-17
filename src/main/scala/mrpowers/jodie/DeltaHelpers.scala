@@ -1,6 +1,6 @@
 package mrpowers.jodie
 
-import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession}
 import io.delta.tables._
 import org.apache.spark.sql.expressions.Window.partitionBy
 import org.apache.spark.sql.functions.{col, concat_ws, count, md5, row_number}
@@ -29,7 +29,7 @@ object DeltaHelpers {
    * @param duplicateColumns
    *   : collection of columns names that represent the duplication key.
    */
-  def removeDuplicateRecords(deltaTable: DeltaTable, duplicateColumns: Seq[String]): Unit = {
+  def killDuplicateRecords(deltaTable: DeltaTable, duplicateColumns: Seq[String]): Unit = {
     val df = deltaTable.toDF
 
     // 1 Validate duplicateColumns is not empty
@@ -71,34 +71,30 @@ object DeltaHelpers {
   def removeDuplicateRecords(
       deltaTable: DeltaTable,
       primaryKey: String,
-      duplicateColumns: Seq[String] = Nil
+      duplicateColumns: Seq[String]
   ): Unit = {
     val df = deltaTable.toDF
     // 1 Validate primaryKey is not empty
-    if (primaryKey.isEmpty) {
+    if (primaryKey.isEmpty)
       throw new NoSuchElementException("the input parameter primaryKey must not be empty")
-    }
+
+    // Validate duplicateColumns is not empty
+    if (duplicateColumns.isEmpty)
+      throw new NoSuchElementException("the input parameter duplicateColumns must not be empty")
 
     // 2 Validate if duplicateColumns is not empty that all its columns are in the delta table
     JodieValidator.validateColumnsExistsInDataFrame(duplicateColumns, df)
 
     // 3 execute query using window function to find duplicate records. Create a match expression to evaluate
     // the case when duplicateColumns is empty and when it is not empty
-    val duplicateRecords = duplicateColumns match {
-      case Nil =>
-        df.withColumn("row_number", row_number().over(partitionBy(primaryKey).orderBy(primaryKey)))
-          .filter("row_number>1")
-          .drop("row_number")
-          .distinct()
-
-      case columns =>
-        df.withColumn(
-          "row_number",
-          row_number().over(partitionBy(columns.map(c => col(c)): _*).orderBy(primaryKey))
-        ).filter("row_number>1")
-          .drop("row_number")
-          .distinct()
-    }
+    val duplicateRecords = df
+      .withColumn(
+        "row_number",
+        row_number().over(partitionBy(duplicateColumns.map(c => col(c)): _*).orderBy(primaryKey))
+      )
+      .filter("row_number>1")
+      .drop("row_number")
+      .distinct()
 
     // 4 execute delete statement  in the delta table
     val deleteCondition =
@@ -109,6 +105,33 @@ object DeltaHelpers {
       .whenMatched()
       .delete()
       .execute()
+  }
+
+  def removeDuplicateRecords(deltaTable: DeltaTable, duplicateColumns: Seq[String]): Unit = {
+    val df = deltaTable.toDF
+
+    // 1 Validate duplicateColumns is not empty
+    if (duplicateColumns.isEmpty)
+      throw new NoSuchElementException("the input parameter duplicateColumns must not be empty")
+
+    // 2 Validate duplicateColumns exists in the delta table.
+    JodieValidator.validateColumnsExistsInDataFrame(duplicateColumns, df)
+
+    val storagePath = getStorageLocation(deltaTable)
+
+    // 3 execute query statement with windows function that will help you identify duplicated records.
+    df
+      .dropDuplicates(duplicateColumns)
+      .write
+      .format("delta")
+      .mode(SaveMode.Overwrite)
+      .save(storagePath)
+  }
+
+  def getStorageLocation(deltaTable: DeltaTable): String = {
+    val row          = deltaTable.detail().select("location").collect().head
+    val locationPath = row.getString(0)
+    locationPath
   }
 
   /**
@@ -170,28 +193,51 @@ object DeltaHelpers {
       throw new NoSuchElementException("The attribute primaryKeysColumns must not be empty")
 
     val mergeCondition = primaryKeysColumns.map(c => s"old.$c = new.$c").mkString(" AND ")
-
+    val appendDataCleaned = appendData.dropDuplicates(primaryKeysColumns)
     deltaTable
       .alias("old")
-      .merge(appendData.alias("new"), mergeCondition)
+      .merge(appendDataCleaned.alias("new"), mergeCondition)
       .whenNotMatched()
       .insertAll()
       .execute()
   }
 
+  def findCompositeKeyCandidate(
+      deltaTable: DeltaTable,
+      excludeCols: Seq[String] = Nil
+  ): Seq[String] = {
+    val df = deltaTable.toDF
+
+    val cols      = df.columns.toSeq
+    val totalCols = cols.length
+    val totalRows = df.distinct().count()
+    val dfCleaned = df.drop(excludeCols: _*)
+
+    val compositeColumns = for {
+      i <- 1 to totalCols + 1
+      r <- dfCleaned.columns.combinations(i)
+      if dfCleaned.select(r.map(c => col(c)): _*).distinct().count() == totalRows
+      if r.length != totalCols
+    } yield r
+
+    if (compositeColumns.nonEmpty)
+      compositeColumns.head
+    else
+      Nil
+  }
+
   def withMD5Columns(
-      dataFrame: DataFrame,
-      cols: List[String],
-      newColName: String = ""
-  ): DataFrame = {
+                      dataFrame: DataFrame,
+                      cols: List[String],
+                      newColName: String = ""
+                    ): DataFrame = {
     val outputCol = if (newColName.isEmpty) cols.mkString("_md5", "", "") else newColName
     dataFrame.withColumn(outputCol, md5(concat_ws("||", cols.map(c => col(c)): _*)))
   }
 
   def withMD5Columns(
-      deltaTable: DeltaTable,
-      cols: List[String],
-      newColName: String
-  ): DataFrame = withMD5Columns(deltaTable.toDF, cols, newColName)
-
+                      deltaTable: DeltaTable,
+                      cols: List[String],
+                      newColName: String
+                    ): DataFrame = withMD5Columns(deltaTable.toDF, cols, newColName)
 }
