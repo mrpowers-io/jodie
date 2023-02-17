@@ -256,6 +256,39 @@ The result table will be the following:
 |   3|     Jose| Travolta| 
 +----+---------+---------+
 ```
+### Generate MD5 from columns
+The function `withMD5Columns` appends a md5 hash of specified columns to the DataFrame. This can be used as a unique key 
+if the selected columns form a composite key. Here is an example
+
+Suppose we have the following table:
+
+```
++----+---------+---------+
+|  id|firstname| lastname|
++----+---------+-----------+
+|   1|   Benito|  Jackson|
+|   4|    Maria|     Pitt|
+|   6|  Rosalia|     Pitt|
++----+---------+---------+
+```
+
+We use the function in this way:
+```scala
+DeltaHelpers.withMD5Columns(dataFrame = inputDF, cols = List("firstname","lastname"), newColName = "unique_id")
+```
+
+The result table will be the following:
+```
++----+---------+---------+----------------------------------+
+|  id|firstname| lastname| unique_id                        |
++----+---------+---------+-----------------------------------+
+|   1|   Benito|  Jackson| 3456d6842080e8188b35f515254fece8 |
+|   4|    Maria|     Pitt| 4fd906b56cc15ca517c554b215597ea1 |
+|   6|  Rosalia|     Pitt| 3b3814001b13695931b6df8670172f91 |
++----+---------+---------+----------------------------------+
+```
+
+You can use this function with the columns identified in findCompositeKeyCandidate to append a unique key to the DataFrame.
 
 ### Find Composite Key
 This function `findCompositeKeyCandidate` helps you find a composite key that uniquely identifies the rows your Delta table. 

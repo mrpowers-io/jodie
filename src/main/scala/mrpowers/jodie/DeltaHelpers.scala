@@ -3,9 +3,7 @@ package mrpowers.jodie
 import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession}
 import io.delta.tables._
 import org.apache.spark.sql.expressions.Window.partitionBy
-import org.apache.spark.sql.functions.{col, count, row_number}
-
-import scala.util.Try
+import org.apache.spark.sql.functions.{col, concat_ws, count, md5, row_number}
 
 object DeltaHelpers {
 
@@ -228,4 +226,18 @@ object DeltaHelpers {
       Nil
   }
 
+  def withMD5Columns(
+                      dataFrame: DataFrame,
+                      cols: List[String],
+                      newColName: String = ""
+                    ): DataFrame = {
+    val outputCol = if (newColName.isEmpty) cols.mkString("_md5", "", "") else newColName
+    dataFrame.withColumn(outputCol, md5(concat_ws("||", cols.map(c => col(c)): _*)))
+  }
+
+  def withMD5Columns(
+                      deltaTable: DeltaTable,
+                      cols: List[String],
+                      newColName: String
+                    ): DataFrame = withMD5Columns(deltaTable.toDF, cols, newColName)
 }
