@@ -1,6 +1,6 @@
 package mrpowers.jodie
 
-import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession}
 import io.delta.tables._
 import org.apache.spark.sql.expressions.Window.partitionBy
 import org.apache.spark.sql.functions.{col, count, row_number}
@@ -29,7 +29,7 @@ object DeltaHelpers {
    * @param duplicateColumns
    *   : collection of columns names that represent the duplication key.
    */
-  def removeDuplicateRecords(deltaTable: DeltaTable, duplicateColumns: Seq[String]): Unit = {
+  def killDuplicateRecords(deltaTable: DeltaTable, duplicateColumns: Seq[String]): Unit = {
     val df = deltaTable.toDF
 
     // 1 Validate duplicateColumns is not empty
@@ -71,34 +71,30 @@ object DeltaHelpers {
   def removeDuplicateRecords(
       deltaTable: DeltaTable,
       primaryKey: String,
-      duplicateColumns: Seq[String] = Nil
+      duplicateColumns: Seq[String]
   ): Unit = {
     val df = deltaTable.toDF
     // 1 Validate primaryKey is not empty
-    if (primaryKey.isEmpty) {
+    if (primaryKey.isEmpty)
       throw new NoSuchElementException("the input parameter primaryKey must not be empty")
-    }
+
+    // Validate duplicateColumns is not empty
+    if (duplicateColumns.isEmpty)
+      throw new NoSuchElementException("the input parameter duplicateColumns must not be empty")
 
     // 2 Validate if duplicateColumns is not empty that all its columns are in the delta table
     JodieValidator.validateColumnsExistsInDataFrame(duplicateColumns, df)
 
     // 3 execute query using window function to find duplicate records. Create a match expression to evaluate
     // the case when duplicateColumns is empty and when it is not empty
-    val duplicateRecords = duplicateColumns match {
-      case Nil =>
-        df.withColumn("row_number", row_number().over(partitionBy(primaryKey).orderBy(primaryKey)))
-          .filter("row_number>1")
-          .drop("row_number")
-          .distinct()
-
-      case columns =>
-        df.withColumn(
-          "row_number",
-          row_number().over(partitionBy(columns.map(c => col(c)): _*).orderBy(primaryKey))
-        ).filter("row_number>1")
-          .drop("row_number")
-          .distinct()
-    }
+    val duplicateRecords = df
+      .withColumn(
+        "row_number",
+        row_number().over(partitionBy(duplicateColumns.map(c => col(c)): _*).orderBy(primaryKey))
+      )
+      .filter("row_number>1")
+      .drop("row_number")
+      .distinct()
 
     // 4 execute delete statement  in the delta table
     val deleteCondition =
@@ -109,6 +105,33 @@ object DeltaHelpers {
       .whenMatched()
       .delete()
       .execute()
+  }
+
+  def removeDuplicateRecords(deltaTable: DeltaTable, duplicateColumns: Seq[String]): Unit = {
+    val df = deltaTable.toDF
+
+    // 1 Validate duplicateColumns is not empty
+    if (duplicateColumns.isEmpty)
+      throw new NoSuchElementException("the input parameter duplicateColumns must not be empty")
+
+    // 2 Validate duplicateColumns exists in the delta table.
+    JodieValidator.validateColumnsExistsInDataFrame(duplicateColumns, df)
+
+    val storagePath = getStorageLocation(deltaTable)
+
+    // 3 execute query statement with windows function that will help you identify duplicated records.
+    df
+      .dropDuplicates(duplicateColumns)
+      .write
+      .format("delta")
+      .mode(SaveMode.Overwrite)
+      .save(storagePath)
+  }
+
+  def getStorageLocation(deltaTable: DeltaTable): String = {
+    val row          = deltaTable.detail().select("location").collect().head
+    val locationPath = row.getString(0)
+    locationPath
   }
 
   /**

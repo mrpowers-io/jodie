@@ -65,12 +65,8 @@ You can leverage the upsert code if your SCD table meets these requirements:
 
 `merge` logic can get really messy, so it's easiest to follow these conventions.  See [this blog post](https://mungingdata.com/delta-lake/type-2-scd-upserts/) if you'd like to build a SCD with custom logic.
 
-### Remove Duplicates
-
-There are two versions of the `removeDuplicateRecords` function. One deletes all the duplicated records from a table, and
-the other one also deletes duplicates but keeps one occurrence of each record that was duplicated.
-
-#### Let’s see an example of how to use the first version:
+### Kill Duplicates
+The function `killDuplicateRecords` deletes all the duplicated records from a table given a set of columns.
 
 Suppose you have the following table:
 
@@ -83,7 +79,46 @@ Suppose you have the following table:
 |   3|     Jose| Travolta| # duplicate
 |   4|   Benito|  Jackson| # duplicate
 |   5|     Jose| Travolta| # duplicate
-|   6|    Maria|     Pitt|
+|   6|    Maria|   Pitt|
+|   9|   Benito|  Jackson| # duplicate
++----+---------+---------+
+```
+We can Run the following function to remove all duplicates:
+
+```scala
+DeltaHelpers.killDuplicateRecords(deltaTable = deltaTable, duplicateColumns = Seq("firstname","lastname"))
+```
+
+The result of running the previous function is the following table:
+
+```
++----+---------+---------+
+|  id|firstname| lastname|
++----+---------+-----------+
+|   2|    Maria|   Willis|
+|   2|    Maria|   Pitt| 
++----+---------+---------+
+```
+
+### Remove Duplicates
+
+The functions `removeDuplicateRecords` deletes duplicates but keeps one occurrence of each record that was duplicated.
+There are two versions of that function, lets look an example of each,
+
+#### Let’s see an example of how to use the first version:
+
+Suppose you have the following table:
+
+```
++----+---------+---------+
+|  id|firstname| lastname|
++----+---------+-----------+
+|   2|    Maria|   Willis|
+|   3|     Jose| Travolta| # duplicate
+|   4|   Benito|  Jackson| # duplicate
+|   1|   Benito|  Jackson| # duplicate
+|   5|     Jose| Travolta| # duplicate
+|   6|    Maria|   Willis|
 |   9|   Benito|  Jackson| # duplicate
 +----+---------+---------+
 ```
@@ -99,30 +134,32 @@ The result of running the previous function is the following table:
 +----+---------+---------+
 |  id|firstname| lastname|
 +----+---------+-----------+
+|   4|   Benito|  Jackson|
 |   2|    Maria|   Willis|
-|   6|    Maria|     Pitt|
+|   3|     Jose| Travolta| 
 +----+---------+---------+
 ```
 
 #### Now let’s see an example of how to use the second version:
 
-Suppose you have the same initial table:
+Suppose you have a similar table:
 
 ```
 +----+---------+---------+
 |  id|firstname| lastname|
 +----+---------+-----------+
-|   1|   Benito|  Jackson| # duplicate
 |   2|    Maria|   Willis|
 |   3|     Jose| Travolta| # duplicate
 |   4|   Benito|  Jackson| # duplicate
+|   1|   Benito|  Jackson| # duplicate
 |   5|     Jose| Travolta| # duplicate
 |   6|    Maria|     Pitt|
 |   9|   Benito|  Jackson| # duplicate
 +----+---------+---------+
 ```
 
-We can Run the following function to remove duplicates but keep one occurrence of each record that was duplicated:
+This time the function takes an additional input parameter, a primary key that will be used to sort 
+the duplicated records in ascending order and remove them according to that order.
 
 ```scala
 DeltaHelpers.removeDuplicateRecords(deltaTable = deltaTable, primaryKey = "id", duplicateColumns = Seq("firstname","lastname"))
@@ -141,8 +178,7 @@ The result of running the previous function is the following:
 +----+---------+---------+
 ```
 
-Note how we keep one occurrence of each record that was duplicated. This function comes in handy when you are doing data
-cleansing.
+These functions come in handy when you are doing data cleansing.
 
 ### Copy Delta Table
 This function takes an existing delta table and makes a copy of all its data, properties,
