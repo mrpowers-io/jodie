@@ -8,7 +8,7 @@ scalaVersion := "2.12.12"
 libraryDependencies += "org.apache.spark" %% "spark-sql" % "3.3.1" % "provided"
 
 libraryDependencies += "io.delta" %% "delta-core" % "2.1.0" % "provided"
-libraryDependencies += "com.github.mrpowers" %% "spark-daria" % "0.38.2" % "test"
+libraryDependencies += "com.github.mrpowers" %% "spark-daria" % "1.0.0" % "test"
 libraryDependencies += "com.github.mrpowers" %% "spark-fast-tests" % "1.3.0" % "test"
 libraryDependencies += "org.scalatest" %% "scalatest" % "3.2.15" % "test"
 libraryDependencies += "com.lihaoyi" %% "os-lib" % "0.7.1" % "test"
@@ -19,10 +19,21 @@ javaOptions ++= Seq("-Xms512M", "-Xmx2048M", "-XX:MaxPermSize=2048M", "-XX:+CMSC
 // Show runtime of tests
 testOptions in Test += Tests.Argument(TestFrameworks.ScalaTest, "-oD")
 
-// JAR file settings
+// deploy stuff
+credentials += Credentials(Path.userHome / ".sbt" / "sonatype_credentials")
 
-// don't include Scala in the JAR file
-//assemblyOption in assembly := (assemblyOption in assembly).value.copy(includeScala = false)
+licenses := Seq("MIT" -> url("http://opensource.org/licenses/MIT"))
 
-// Add the JAR file naming conventions described here: https://github.com/MrPowers/spark-style-guide#jar-files
-// You can add the JAR file naming conventions by running the shell script
+homepage := Some(url("https://github.com/MrPowers/jodie"))
+developers ++= List(
+  Developer("MrPowers", "Matthew Powers", "@MrPowers", url("https://github.com/MrPowers"))
+)
+scmInfo := Some(ScmInfo(url("https://github.com/MrPowers/jodie"), "git@github.com:MrPowers/jodie.git"))
+
+updateOptions := updateOptions.value.withLatestSnapshots(false)
+
+publishMavenStyle := true
+
+publishTo := sonatypePublishToBundle.value
+
+Global / useGpgPinentry := true
