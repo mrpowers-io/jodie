@@ -6,7 +6,16 @@ This library provides helpful Delta Lake and filesystem utility functions.
 
 ## Accessing the library
 
-*How to access the code*
+Fetch the JAR file from Maven.
+
+```scala
+libraryDependencies += "com.github.mrpowers" %% "jodie" % "0.0.3"
+```
+
+You can find the spark-daria releases for different Scala versions:
+
+* [Scala 2.12 versions here](https://repo1.maven.org/maven2/com/github/mrpowers/jodie_2.12/)
+* [Scala 2.13 versions here](https://repo1.maven.org/maven2/com/github/mrpowers/jodie_2.13/)
 
 ## Delta
 
