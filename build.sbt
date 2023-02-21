@@ -1,14 +1,14 @@
 name := "jodie"
 organization := "com.github.mrpowers"
 
-version := "0.0.2"
+version := "0.0.3"
 
 crossScalaVersions := Seq("2.12.17", "2.13.10")
 
 libraryDependencies += "org.apache.spark" %% "spark-sql" % "3.3.1" % "provided"
 
 libraryDependencies += "io.delta" %% "delta-core" % "2.1.0" % "provided"
-libraryDependencies += "com.github.mrpowers" %% "spark-daria" % "1.0.0" % "test"
+libraryDependencies += "com.github.mrpowers" %% "spark-daria" % "1.2.3" % "test"
 libraryDependencies += "com.github.mrpowers" %% "spark-fast-tests" % "1.3.0" % "test"
 libraryDependencies += "org.scalatest" %% "scalatest" % "3.2.15" % "test"
 libraryDependencies += "com.lihaoyi" %% "os-lib" % "0.7.1" % "test"
