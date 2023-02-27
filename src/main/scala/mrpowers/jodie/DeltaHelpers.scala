@@ -181,19 +181,19 @@ object DeltaHelpers {
    *   : delta table object
    * @param appendData
    *   : new data to be inserted in the existing delta table
-   * @param primaryKeysColumns
+   * @param compositeKey
    *   : set of columns that grouped form a unique key inside the table.
    */
   def appendWithoutDuplicates(
       deltaTable: DeltaTable,
       appendData: DataFrame,
-      primaryKeysColumns: Seq[String]
+      compositeKey: Seq[String]
   ): Unit = {
-    if (primaryKeysColumns.isEmpty)
-      throw new NoSuchElementException("The attribute primaryKeysColumns must not be empty")
+    if (compositeKey.isEmpty)
+      throw new NoSuchElementException("The attribute compositeKey must not be empty")
 
-    val mergeCondition = primaryKeysColumns.map(c => s"old.$c = new.$c").mkString(" AND ")
-    val appendDataCleaned = appendData.dropDuplicates(primaryKeysColumns)
+    val mergeCondition = compositeKey.map(c => s"old.$c = new.$c").mkString(" AND ")
+    val appendDataCleaned = appendData.dropDuplicates(compositeKey)
     deltaTable
       .alias("old")
       .merge(appendDataCleaned.alias("new"), mergeCondition)

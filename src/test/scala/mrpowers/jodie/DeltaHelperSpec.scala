@@ -559,7 +559,7 @@ class DeltaHelperSpec
       )
     }
 
-    it("it should fail to insert data when primaryKeysColumns is empty") {
+    it("it should fail to insert data when compositeKey is empty") {
       val path = (os.pwd / "tmp" / "delta-lake-inserts-no-dup").toString()
       Seq(
         (1, "Benito", "Jackson"),
@@ -582,7 +582,7 @@ class DeltaHelperSpec
         DeltaHelpers.appendWithoutDuplicates(deltaTable, df, Seq())
       }.getMessage
 
-      assert(exceptionMessage.contains("The attribute primaryKeysColumns must not be empty"))
+      assert(exceptionMessage.contains("The attribute compositeKey must not be empty"))
     }
 
     it("should execute successful when an empty dataframe(appendData) is given") {

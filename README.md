@@ -249,7 +249,7 @@ And we want to insert this new dataframe:
 
 We can use the following function to insert new data and avoid data duplication:
 ```scala
-DeltaHelpers.appendWithoutDuplicates(deltaTable = deltaTable,appendData = newDataDF, primaryKeysColumns = Seq("firstname","lastname"))
+DeltaHelpers.appendWithoutDuplicates(deltaTable = deltaTable,appendData = newDataDF, compositeKey = Seq("firstname","lastname"))
 ```
 
 The result table will be the following:
