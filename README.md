@@ -75,6 +75,7 @@ You can leverage the upsert code if your SCD table meets these requirements:
 `merge` logic can get really messy, so it's easiest to follow these conventions.  See [this blog post](https://mungingdata.com/delta-lake/type-2-scd-upserts/) if you'd like to build a SCD with custom logic.
 
 ### Kill Duplicates
+
 The function `killDuplicateRecords` deletes all the duplicated records from a table given a set of columns.
 
 Suppose you have the following table:
@@ -92,6 +93,7 @@ Suppose you have the following table:
 |   9|   Benito|  Jackson| # duplicate
 +----+---------+---------+
 ```
+
 We can Run the following function to remove all duplicates:
 
 ```scala
@@ -126,11 +128,11 @@ Suppose you have the following table:
 |  id|firstname| lastname|
 +----+---------+---------+
 |   2|    Maria|   Willis|
-|   3|     Jose| Travolta| # duplicate
-|   4|   Benito|  Jackson| # duplicate
+|   3|     Jose| Travolta|
+|   4|   Benito|  Jackson|
 |   1|   Benito|  Jackson| # duplicate
 |   5|     Jose| Travolta| # duplicate
-|   6|    Maria|   Willis|
+|   6|    Maria|   Willis| # duplicate
 |   9|   Benito|  Jackson| # duplicate
 +----+---------+---------+
 ```
@@ -139,6 +141,7 @@ We can Run the following function to remove all duplicates:
 ```scala
 DeltaHelpers.removeDuplicateRecords(
   deltaTable = deltaTable,
+  primaryKey = "id",
   duplicateColumns = Seq("firstname","lastname")
 )
 ```
@@ -149,9 +152,9 @@ The result of running the previous function is the following table:
 +----+---------+---------+
 |  id|firstname| lastname|
 +----+---------+---------+
-|   4|   Benito|  Jackson|
 |   2|    Maria|   Willis|
-|   3|     Jose| Travolta| 
+|   3|     Jose| Travolta|
+|   4|   Benito|  Jackson| 
 +----+---------+---------+
 ```
 
