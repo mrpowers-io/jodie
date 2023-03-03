@@ -82,20 +82,23 @@ Suppose you have the following table:
 ```
 +----+---------+---------+
 |  id|firstname| lastname|
-+----+---------+-----------+
++----+---------+---------+
 |   1|   Benito|  Jackson| # duplicate
 |   2|    Maria|   Willis|
 |   3|     Jose| Travolta| # duplicate
 |   4|   Benito|  Jackson| # duplicate
 |   5|     Jose| Travolta| # duplicate
-|   6|    Maria|   Pitt|
+|   6|    Maria|     Pitt|
 |   9|   Benito|  Jackson| # duplicate
 +----+---------+---------+
 ```
 We can Run the following function to remove all duplicates:
 
 ```scala
-DeltaHelpers.killDuplicateRecords(deltaTable = deltaTable, duplicateColumns = Seq("firstname","lastname"))
+DeltaHelpers.killDuplicateRecords(
+  deltaTable = deltaTable, 
+  duplicateColumns = Seq("firstname","lastname")
+)
 ```
 
 The result of running the previous function is the following table:
@@ -103,9 +106,9 @@ The result of running the previous function is the following table:
 ```
 +----+---------+---------+
 |  id|firstname| lastname|
-+----+---------+-----------+
++----+---------+---------+
 |   2|    Maria|   Willis|
-|   2|    Maria|   Pitt| 
+|   2|    Maria|     Pitt| 
 +----+---------+---------+
 ```
 
@@ -121,7 +124,7 @@ Suppose you have the following table:
 ```
 +----+---------+---------+
 |  id|firstname| lastname|
-+----+---------+-----------+
++----+---------+---------+
 |   2|    Maria|   Willis|
 |   3|     Jose| Travolta| # duplicate
 |   4|   Benito|  Jackson| # duplicate
@@ -134,7 +137,10 @@ Suppose you have the following table:
 We can Run the following function to remove all duplicates:
 
 ```scala
-DeltaHelpers.removeDuplicateRecords(deltaTable = deltaTable, duplicateColumns = Seq("firstname","lastname"))
+DeltaHelpers.removeDuplicateRecords(
+  deltaTable = deltaTable,
+  duplicateColumns = Seq("firstname","lastname")
+)
 ```
 
 The result of running the previous function is the following table:
@@ -142,7 +148,7 @@ The result of running the previous function is the following table:
 ```
 +----+---------+---------+
 |  id|firstname| lastname|
-+----+---------+-----------+
++----+---------+---------+
 |   4|   Benito|  Jackson|
 |   2|    Maria|   Willis|
 |   3|     Jose| Travolta| 
@@ -156,7 +162,7 @@ Suppose you have a similar table:
 ```
 +----+---------+---------+
 |  id|firstname| lastname|
-+----+---------+-----------+
++----+---------+---------+
 |   2|    Maria|   Willis|
 |   3|     Jose| Travolta| # duplicate
 |   4|   Benito|  Jackson| # duplicate
@@ -171,7 +177,11 @@ This time the function takes an additional input parameter, a primary key that w
 the duplicated records in ascending order and remove them according to that order.
 
 ```scala
-DeltaHelpers.removeDuplicateRecords(deltaTable = deltaTable, primaryKey = "id", duplicateColumns = Seq("firstname","lastname"))
+DeltaHelpers.removeDuplicateRecords(
+  deltaTable = deltaTable,
+  primaryKey = "id",
+  duplicateColumns = Seq("firstname","lastname")
+)
 ```
 
 The result of running the previous function is the following:
@@ -179,7 +189,7 @@ The result of running the previous function is the following:
 ```
 +----+---------+---------+
 |  id|firstname| lastname|
-+----+---------+-----------+
++----+---------+---------+
 |   1|   Benito|  Jackson|
 |   2|    Maria|   Willis|
 |   3|     Jose| Travolta|
@@ -190,6 +200,7 @@ The result of running the previous function is the following:
 These functions come in handy when you are doing data cleansing.
 
 ### Copy Delta Table
+
 This function takes an existing delta table and makes a copy of all its data, properties,
 and partitions to a new delta table. The new table could be created based on a specified path or
 just a given table name. 
@@ -228,7 +239,7 @@ Suppose we have the following table:
 ```
 +----+---------+---------+
 |  id|firstname| lastname|
-+----+---------+-----------+
++----+---------+---------+
 |   1|   Benito|  Jackson|
 |   4|    Maria|     Pitt|
 |   6|  Rosalia|     Pitt|
@@ -239,7 +250,7 @@ And we want to insert this new dataframe:
 ```
 +----+---------+---------+
 |  id|firstname| lastname|
-+----+---------+-----------+
++----+---------+---------+
 |   6|  Rosalia|     Pitt| # duplicate
 |   2|    Maria|   Willis|
 |   3|     Jose| Travolta|
@@ -257,7 +268,7 @@ The result table will be the following:
 ```
 +----+---------+---------+
 |  id|firstname| lastname|
-+----+---------+-----------+
++----+---------+---------+
 |   1|   Benito|  Jackson|
 |   4|    Maria|     Pitt|
 |   6|  Rosalia|     Pitt|
@@ -274,7 +285,7 @@ Suppose we have the following table:
 ```
 +----+---------+---------+
 |  id|firstname| lastname|
-+----+---------+-----------+
++----+---------+---------+
 |   1|   Benito|  Jackson|
 |   4|    Maria|     Pitt|
 |   6|  Rosalia|     Pitt|
@@ -283,14 +294,18 @@ Suppose we have the following table:
 
 We use the function in this way:
 ```scala
-DeltaHelpers.withMD5Columns(dataFrame = inputDF, cols = List("firstname","lastname"), newColName = "unique_id")
+DeltaHelpers.withMD5Columns(
+  dataFrame = inputDF,
+  cols = List("firstname","lastname"),
+  newColName = "unique_id")
+)
 ```
 
 The result table will be the following:
 ```
 +----+---------+---------+----------------------------------+
 |  id|firstname| lastname| unique_id                        |
-+----+---------+---------+-----------------------------------+
++----+---------+---------+----------------------------------+
 |   1|   Benito|  Jackson| 3456d6842080e8188b35f515254fece8 |
 |   4|    Maria|     Pitt| 4fd906b56cc15ca517c554b215597ea1 |
 |   6|  Rosalia|     Pitt| 3b3814001b13695931b6df8670172f91 |
@@ -308,7 +323,7 @@ Suppose we have the following table:
 ```
 +----+---------+---------+
 |  id|firstname| lastname|
-+----+---------+-----------+
++----+---------+---------+
 |   1|   Benito|  Jackson|
 |   4|    Maria|     Pitt|
 |   6|  Rosalia|     Pitt|
@@ -317,7 +332,10 @@ Suppose we have the following table:
 
 Now execute the function:
 ```scala
-val result = DeltaHelpers.findCompositeKeyCandidate(deltaTable = deltaTable,excludeCols = Seq("id"))
+val result = DeltaHelpers.findCompositeKeyCandidate(
+  deltaTable = deltaTable,
+  excludeCols = Seq("id")
+)
 ```
 
 The result will be the following:
