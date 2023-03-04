@@ -263,7 +263,11 @@ And we want to insert this new dataframe:
 
 We can use the following function to insert new data and avoid data duplication:
 ```scala
-DeltaHelpers.appendWithoutDuplicates(deltaTable = deltaTable,appendData = newDataDF, compositeKey = Seq("firstname","lastname"))
+DeltaHelpers.appendWithoutDuplicates(
+  deltaTable = deltaTable,
+  appendData = newDataDF, 
+  compositeKey = Seq("firstname","lastname")
+)
 ```
 
 The result table will be the following:
@@ -280,6 +284,7 @@ The result table will be the following:
 +----+---------+---------+
 ```
 ### Generate MD5 from columns
+
 The function `withMD5Columns` appends a md5 hash of specified columns to the DataFrame. This can be used as a unique key 
 if the selected columns form a composite key. Here is an example
 
