@@ -4,6 +4,8 @@ import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession}
 import io.delta.tables._
 import org.apache.spark.sql.expressions.Window.partitionBy
 import org.apache.spark.sql.functions.{col, concat_ws, count, md5, row_number}
+import scala.util.{Try, Success, Failure}
+
 
 object DeltaHelpers {
 
@@ -240,4 +242,47 @@ object DeltaHelpers {
                       cols: List[String],
                       newColName: String
                     ): DataFrame = withMD5Columns(deltaTable.toDF, cols, newColName)
+  
+
+  /**
+   * this function allows to delete rows from a DeltaTable from rows of a dataframe with join of one or more columns and the comparison operator like ("=",">","!=",...)
+   * and return number of deleted rows
+   * @param deltaTable
+   *   : delta table object.
+   * @param dataFrame
+   *   : dataframe source
+   * @param attrColNameOper
+   *   : Map[("column Name", "Operator")]
+   */
+
+  def deleteFromAnotherDataframe
+                  (
+                  targetTableDelta: io.delta.tables.DeltaTable,
+                  sourceDF: org.apache.spark.sql.DataFrame,
+                  attrColNameOper: Map[String,String]
+                  ) : Int = 
+  {
+
+    var returnValue  : Int = 0
+
+    Try{
+        val stagedUpdatesAttrs = attrColNameOper.map(attr => "target."+ attr._1 + " " +attr._2 + " source."+ attr._1).mkString(" AND ")
+  
+        targetTableDelta.alias("target")
+            .merge(
+              sourceDF.alias("source"),
+              stagedUpdatesAttrs)
+            .whenMatched().delete()
+            .execute()
+
+        returnValue = Integer.parseInt(targetTableDelta.history(1).select("operationMetrics.numTargetRowsDeleted").first().getAs[String]("numTargetRowsDeleted").toString())
+        return returnValue
+    
+    }
+      match {
+        case Success(_) => return -1
+        case Failure(e) => 
+        throw new Exception(s" Check input params of function deleteFromAnotherDataframe : ${e}")   
+    }
+  }
 }
