@@ -12,10 +12,11 @@ import org.scalatest.matchers.should.Matchers.{convertToAnyShouldWrapper, equal}
 import java.nio.file.{Files, Paths}
 
 class ChangeDataFeedHelperSpec extends AnyFunSpec
-  with CDFEnabledSparkSessionTestWrapper
+  with SparkSessionTestWrapper
   with DataFrameComparer
   with BeforeAndAfterEach {
   var writePath = ""
+  spark.conf.set("spark.databricks.delta.properties.defaults.enableChangeDataFeed", "true")
 
   override def afterEach(): Unit = {
     val tmpDir = os.pwd / "tmp" / "delta-cdf-edr"
@@ -24,7 +25,6 @@ class ChangeDataFeedHelperSpec extends AnyFunSpec
 
   describe("When CDF is enabled on Delta Table") {
     val path = (os.pwd / "tmp" / "delta-cdf-edr").toString()
-    spark.sql(s"CREATE TABLE default.snapshot USING DELTA LOCATION  '${path}' ")
     val rows = Seq((1, "Male", 25), (2, "Male", 25), (3, "Female", 35))
 
     val updates = List(
@@ -40,26 +40,36 @@ class ChangeDataFeedHelperSpec extends AnyFunSpec
       it("Case I - Delta Log is deleted : version is above 10 and checkpoint is present but version 0.json is deleted") {
         setUp("valid_snapshot", snapshotDF, path, updates)
         Files.deleteIfExists(Paths.get(FileNames.deltaFile(new Path(writePath + "/_delta_log"), 0).toString))
-        val actualVersions = ChangeDataFeedHelper(writePath, 11, 13).getVersionsForAvailableDeltaLog
+        val changeDataFeedHelper = ChangeDataFeedHelper(writePath, 11, 13)
+        val actualVersions = changeDataFeedHelper.getVersionsForAvailableDeltaLog
         val expectedVersions = Some(11l, 13l)
         actualVersions should equal(expectedVersions)
+        val actualDF = changeDataFeedHelper.readCDFIgnoreMissingDeltaLog
+        actualDF.select("_commit_version").distinct().count() should equal(3l)
+        val actualCDCPresentVersions = changeDataFeedHelper.getVersionsForAvailableCDC
+        actualCDCPresentVersions should equal (Some(11l,13l))
+
       }
       it("All Cases Combined : dryRun API usage to check no CDF read issues exist") {
         setUp("dry_run_snapshot", snapshotDF, path, updates)
         val expected = ChangeDataFeedHelper(writePath, 9, 13)
         val actual = expected.dryRun()
         actual should equal(expected)
-        val expectedDF = actual.readCDF
-        expectedDF.select("_commit_version").distinct().count() should equal(5l)
+        val actualDF = actual.readCDF
+        actualDF.select("_commit_version").distinct().count() should equal(5l)
       }
     }
     describe("should not return provided versions and return actual queryable versions that work when") {
       it("Case I - Delta Log is deleted : version is below 10 and 000.json is deleted") {
-        setUp("invalid_snapshot", snapshotDF, path, updates)
+        val name = "invalid_snapshot"
+        executeMergeFor(name,setUp(name, snapshotDF, path, updates),updates.take(3))
         Files.deleteIfExists(Paths.get(FileNames.deltaFile(new Path(writePath + "/_delta_log"), 0).toString))
-        val validVersions = ChangeDataFeedHelper(writePath, 0, 5).getVersionsForAvailableDeltaLog
+        val changeDataFeedHelper = ChangeDataFeedHelper(writePath, 0, 5)
+        val validVersions = changeDataFeedHelper.getVersionsForAvailableDeltaLog
         val expectedVersion = Some(10l, 15l)
         validVersions should equal(expectedVersion)
+        val actualDF = changeDataFeedHelper.readCDFIgnoreMissingDeltaLog
+        actualDF.select("_commit_version").distinct().count() should equal(6l)
       }
       it("Case II - CDC is deleted : underlying data is deleted from _change_data folder") {
         setUp("cdc_snapshot", snapshotDF, path, updates)
@@ -68,9 +78,12 @@ class ChangeDataFeedHelperSpec extends AnyFunSpec
           .filter("cdc is not null").take(1)(0)
         val cdfPath = row.get(0).toString
         Files.deleteIfExists(Paths.get(writePath + "/" + cdfPath))
-        val actualVersion = ChangeDataFeedHelper(writePath, 0, 5).getVersionsForAvailableCDC
+        val changeDataFeedHelper = ChangeDataFeedHelper(writePath, 0, 5)
+        val actualVersion = changeDataFeedHelper.getVersionsForAvailableCDC
         val expectedVersion = Some(2l, 5l)
         actualVersion should equal(expectedVersion)
+        val actualDF = changeDataFeedHelper.readCDFIgnoreMissingCDC
+        actualDF.select("_commit_version").distinct().count() should equal(4l)
       }
       it("Case II - CDC is deleted : underlying data is deleted from _change_data folder and has a fake delete resulting in a no op merge") {
         val name = "cdc_delete_snapshot"
@@ -80,9 +93,12 @@ class ChangeDataFeedHelperSpec extends AnyFunSpec
           .filter("cdc is not null").take(1)(0)
         val cdfPath = row.get(0).toString
         Files.deleteIfExists(Paths.get(writePath + "/" + cdfPath))
-        val actualVersion = ChangeDataFeedHelper(writePath, 15, 18).getVersionsForAvailableCDC
+        val changeDataFeedHelper = ChangeDataFeedHelper(writePath, 15, 18)
+        val actualVersion = changeDataFeedHelper.getVersionsForAvailableCDC
         val expectedVersion = Some(17l, 18l)
         actualVersion should equal(expectedVersion)
+        val actualDF = changeDataFeedHelper.readCDFIgnoreMissingCDC
+        actualDF.select("_commit_version").distinct().count() should equal(2l)
       }
       describe("And then Disabled and Re-enabled again so") {
         it("CASE III - EDR : should not return provided versions and return actual queryable versions that work") {
@@ -97,8 +113,14 @@ class ChangeDataFeedHelperSpec extends AnyFunSpec
         it("CASE III - EDR : with a no op delete merge, should not return provided versions and return actual queryable versions that work") {
           val name = "edr_delete_snapshot"
           noOpDelete(name, setUpForEDR(name, snapshotDF, path, updates, true), updates.take(3), false)
-          val actualVersionList = ChangeDataFeedHelper(writePath, 0, 30).getRangesForCDFEnabledVersions
-          actualVersionList.get should equal(List((0, 3), (7, 8), (12, 20)))
+          val changeDataFeedHelper = ChangeDataFeedHelper(writePath, 0, 30)
+          val enabledVersions = changeDataFeedHelper.getRangesForCDFEnabledVersions
+          enabledVersions.get should equal(List((0, 3), (7, 8), (12, 20)))
+          val disabledVersions = changeDataFeedHelper.getRangesForCDFDisabledVersions
+          disabledVersions.get should equal (List((4,6),(9,11),(21,24)))
+          val actualDF = changeDataFeedHelper.readCDFIgnoreMissingRangesForEDR
+          changeDataFeedHelper.deltaLog.history.getHistory(0).toDF().show(false)
+          actualDF.select("_commit_version").distinct().count() should equal(11l)
         }
       }
     }

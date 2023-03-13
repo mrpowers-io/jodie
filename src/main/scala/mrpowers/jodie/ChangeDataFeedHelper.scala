@@ -144,8 +144,8 @@ case class ChangeDataFeedHelper(path: String, startingVersion: Long, endingVersi
   def getLogVersions(isCheckpoint: Boolean): Option[(Long, Long)] = try {
     val history = deltaLog.history
     history.checkVersionExists(startingVersion, isCheckpoint)
-    val snapshot = deltaLog.getSnapshotAt(startingVersion)
-    if (CDCReader.isCDCEnabledOnTable(snapshot.metadata))
+    val startSnapshot = deltaLog.getSnapshotAt(startingVersion)
+    if (CDCReader.isCDCEnabledOnTable(startSnapshot.metadata))
       Some(startingVersion, endingVersion)
     else {
       None
@@ -160,7 +160,7 @@ case class ChangeDataFeedHelper(path: String, startingVersion: Long, endingVersi
    * Operations may be time-consuming and memory intensive based on Driver if lot of versions need to be verified.
    * Relies on the vacuum operation completion i.e. if a vacuum operation completed successfully, then checking just one
    * file per version from the _change_data folder should be sufficient. Quits the operation as soon as first file is found
-   * in the _change_data directory as it further CDC for upcoming versions would be available generally, if not deleted
+   * in the _change_data directory as vacuum assures further CDC for upcoming versions would be available, if not deleted
    * manually. The obvious marker exception to call this method is [[java.io.FileNotFoundException]], this is thrown
    * when you run the time travel query and underlying data is deleted.
    *
@@ -245,9 +245,9 @@ case class ChangeDataFeedHelper(path: String, startingVersion: Long, endingVersi
    * @return
    */
   def getCDFVersions(deltaLog: DeltaLog, startingVersion: Long, endingVersion: Long): List[(Long, Boolean)] = {
-    val list = deltaLog.getChanges(startingVersion).takeWhile(_._1 <= endingVersion).toList
+    val changes = deltaLog.getChanges(startingVersion).takeWhile(_._1 <= endingVersion).toList
     var prev = false
-    list.map {
+    changes.map {
       case (v, actions) =>
         val cdcEnabled = actions.exists {
           case m: Metadata => prev = isCDCEnabledOnTable(m)
