@@ -729,4 +729,51 @@ class DeltaHelperSpec
         orderedComparison = false)
     }
   }
+  describe("Remove rows from DeltaTable where rows exists in a Source Dataframe") {
+    it("should remove 1 row in target Delta Table"){
+      val path = (os.pwd / "tmp" / "delta-tbl").toString()
+      Seq(
+        (1, "Benito", "Jackson"),
+        (2, "Maria", "Willis"),
+        (3, "Jose", "Travolta"),
+        (4, "Benito", "Willis")
+      )
+        .toDF("id", "firstname", "lastname")
+        .write
+        .format("delta")
+        .mode("overwrite")
+        .save(path)
+	
+	
+	  val deltaTable = DeltaTable.forPath(path)
+	 
+	  val sourceDF = Seq(
+        (1, "Benito", "Jackson", "cad17f15341ed95539e098444a4c8050"),
+        (4, "Brad", "Willis", "3e1e9709234c6250c74241d5886d5073"),
+        (5, "George", "Travolta", "1f1ac7f74f43eff911a92f7e28069271")
+      ).toDF("id", "firstname", "lastname", "unique_id")
+	  
+      
+      val result = DeltaHelpers.deleteFromAnotherDataframe(
+                  deltaTable,
+                  sourceDF,
+                  Map(("id","="),("firstname","="))
+                  )
+	  var resultDF = DeltaTable.forPath(path).toDF
+	  
+	  val expectedDF = Seq(
+        (2, "Maria", "Willis"),
+        (3, "Jose", "Travolta"),
+        (4, "Benito", "Willis")
+      ).toDF("id", "firstname", "lastname")
+	  
+      
+	  assertSmallDataFrameEquality(
+        actualDF = resultDF,
+        expectedDF = expectedDF,
+        ignoreNullable = false,
+        orderedComparison = false)
+    }
+  }
+
 }
