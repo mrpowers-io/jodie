@@ -356,15 +356,15 @@ Seq("firstname","lastname")
 
 ### CASE I - When Delta aka Transaction Log gets purged
 
-`getVersionsForAvailableDeltaLog` - helps you find the versions within the `[startingVersion,endingVersion]`range for which Delta Log is present and CDF read is enabled and possible
+`getVersionsForAvailableDeltaLog` - helps you find the versions within the `[startingVersion,endingVersion]`range for which Delta Log is present and CDF read is enabled (only for the start version) and possible
 ```scala
 ChangeDataFeedHelper(deltaPath, 0, 5).getVersionsForAvailableDeltaLog
 ```
 The result will return the same versions `Some(0,5)` if Delta Logs are present. Otherwise, it will return say `Some(10,15)` - the earliest queryable start version and latest snapshot version as ending version. If at any point within versions it finds that EDR is disabled, it returns a `None`.
 
-`readCDFIgnoreMissingDeltaLog` - Returns a Spark Dataframe for all versions provided by the above method
+`readCDFIgnoreMissingDeltaLog` - Returns an Option of Spark Dataframe for all versions provided by the above method
 ```scala
-ChangeDataFeedHelper(deltaPath, 11, 13).readCDFIgnoreMissingDeltaLog.show(false)
+ChangeDataFeedHelper(deltaPath, 11, 13).readCDFIgnoreMissingDeltaLog.get.show(false)
 
 +---+------+---+----------------+---------------+-------------------+
 |id |gender|age|_change_type    |_commit_version|_commit_timestamp  |
@@ -387,7 +387,7 @@ ChangeDataFeedHelper(deltaPath, 0, 5).getVersionsForAvailableCDC
 The result will return the same versions `Some(0,5)` if CDC data is present for the given versions under `_change_data` directory. Otherwise, it will return `Some(2,5)` - the earliest queryable start version for which CDC is present and given ending version. If no version is found that has CDC data available, it returns a `None`.
  
 
-`readCDFIgnoreMissingCDC` - Returns a Spark Dataframe for all versions provided by the above method
+`readCDFIgnoreMissingCDC` - Returns an Option of Spark Dataframe for all versions provided by the above method
 ```scala
 ChangeDataFeedHelper(deltaPath, 11, 13).readCDFIgnoreMissingCDC.show(false)
 
@@ -412,7 +412,7 @@ Resultant Dataframe is the same as the result of CDF Time Travel query
 ```
 The result will look like `List((0, 3), (7, 8), (12, 20))` signifying all version ranges for which CDF is enabled. The function `getRangesForCDFDisabledVersions` returns exactly same `List` but this time it returns disabled version ranges.
 
-`readCDFIgnoreMissingRangesForEDR`- Returns an unionised Spark Dataframe for all version ranges provided by the above method
+`readCDFIgnoreMissingRangesForEDR`- Returns an Option of unionised Spark Dataframe for all version ranges provided by the above method
 ```scala
  ChangeDataFeedHelper(writePath, 0, 30).readCDFIgnoreMissingRangesForEDR
 +---+------+---+----------------+---------------+-------------------+

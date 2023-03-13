@@ -8,6 +8,7 @@ import org.apache.spark.sql.delta.commands.cdc.CDCReader
 import org.apache.spark.sql.delta.commands.cdc.CDCReader.isCDCEnabledOnTable
 import org.apache.spark.sql.delta.util.FileNames
 import org.apache.spark.sql.delta.{DeltaLog, VersionNotFoundException}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{DataFrame, SparkSession}
 
 import java.io.IOException
@@ -49,8 +50,12 @@ case class ChangeDataFeedHelper(path: String, startingVersion: Long, endingVersi
    * Finds the ranges of versions between {[[startingVersion]] and [[endingVersion]]} for which CDF is available and
    * returns a unionised Dataframe based on these versions skipping the invalid ones.
    */
-  def readCDFIgnoreMissingRangesForEDR = getRangesForCDFEnabledVersions.get
-    .map(x => readCDF(path, x._1, x._2)).reduce(_ union _)
+  def readCDFIgnoreMissingRangesForEDR = for {
+    versionRanges <- getRangesForCDFEnabledVersions
+  } yield versionRanges.map(x => readCDF(path, x._1, x._2)).reduce(_ union _)
+
+  //    getRangesForCDFEnabledVersions
+  //    .map(x => readCDF(path, x._1, x._2)).reduce(_ union _)
 
   /** *
    * Finds the valid versions between which CDF is available and runs time travel query on top of it. [[startingVersion]]
@@ -58,7 +63,7 @@ case class ChangeDataFeedHelper(path: String, startingVersion: Long, endingVersi
    *
    * @return Spark Dataframe between versions returned by [[getVersionsForAvailableDeltaLog]]
    */
-  def readCDFIgnoreMissingDeltaLog = getVersionsForAvailableDeltaLog.map(x => readCDF(path, x._1, x._2)).get
+  def readCDFIgnoreMissingDeltaLog = getVersionsForAvailableDeltaLog.map(x => readCDF(path, x._1, x._2))
 
   /** *
    * Finds and loads the valid versions for which underlying change data is available and not vacuumed. [[startingVersion]]
@@ -66,7 +71,7 @@ case class ChangeDataFeedHelper(path: String, startingVersion: Long, endingVersi
    *
    * @return Spark Dataframe between versions returned by [[getVersionsForAvailableCDC]]
    */
-  def readCDFIgnoreMissingCDC = getVersionsForAvailableCDC.map(x => readCDF(path, x._1, x._2)).get
+  def readCDFIgnoreMissingCDC = getVersionsForAvailableCDC.map(x => readCDF(path, x._1, x._2))
 
   /** *
    * Can be used to verify that none of the issues expressed in [[https://medium.com/@joydeep.roy/change-data-feed-failure-scenarios-prevention-explained-5606c65d0c2e]]
@@ -145,7 +150,10 @@ case class ChangeDataFeedHelper(path: String, startingVersion: Long, endingVersi
     val history = deltaLog.history
     history.checkVersionExists(startingVersion, isCheckpoint)
     val startSnapshot = deltaLog.getSnapshotAt(startingVersion)
-    if (CDCReader.isCDCEnabledOnTable(startSnapshot.metadata))
+    val endSnapshot = deltaLog.getSnapshotAt(endingVersion)
+    // Only checks the start versions whether CDF is enabled. Doesn't check in between if disabled or not. For checking
+    // whether disabled or not, use methods related to EDR
+    if (CDCReader.isCDCEnabledOnTable(startSnapshot.metadata) && CDCReader.isCDCEnabledOnTable(endSnapshot.metadata))
       Some(startingVersion, endingVersion)
     else {
       None
@@ -178,13 +186,18 @@ case class ChangeDataFeedHelper(path: String, startingVersion: Long, endingVersi
         val df = spark.read.json(FileNames.deltaFile(deltaLog.logPath, i).toString)
         df.columns.contains("cdc") match {
           case false => //Check if operation is a NoOp MERGE - one which does not update, insert ot delete any rows
-            val operationMetrics = df.filter("commitInfo is not null")
-              .select("commitInfo.operationMetrics").take(1)(0)
-            val metrics = operationMetrics.get(0).asInstanceOf[GenericRowWithSchema]
-            assert(metrics.getAs[String]("numTargetRowsInserted") == "0"
-              && metrics.getAs[String]("numTargetRowsUpdated") == "0" && metrics.getAs[String]("numTargetRowsDeleted") == "0"
-              , "No insert/update/delete happened and cdc column is not present, CDF might have been disabled between versions")
-            Unit
+            if (df.schema.filter(x => x.name == "commitInfo")(0).dataType.asInstanceOf[StructType].fieldNames.contains("operationMetrics")) {
+              val operationMetrics = df.filter("commitInfo is not null").select("commitInfo.operationMetrics").take(1)(0)
+              val metrics = operationMetrics.get(0).asInstanceOf[GenericRowWithSchema]
+              assert(metrics.getAs[String]("numTargetRowsInserted") == "0"
+                && metrics.getAs[String]("numTargetRowsUpdated") == "0" && metrics.getAs[String]("numTargetRowsDeleted") == "0"
+                , "Insert/Update/Delete has happened but cdc column is not present, CDF might have been disabled between versions")
+              Unit
+            } else {
+              if (df.columns.contains("add") && df.columns.contains("remove"))
+                throw new AssertionError("No insert/update/delete happened and cdc column is not present, CDF might have been disabled between versions")
+              else Unit
+            }
           case true =>
             val row = df.select("cdc.path").filter("cdc is not null").take(1)(0)
             val cdfPath = row.get(0).toString
