@@ -43,6 +43,8 @@ class ChangeDataFeedHelperSpec extends AnyFunSpec
         val changeDataFeedHelper = ChangeDataFeedHelper(writePath, 11, 13)
         val actualVersions = changeDataFeedHelper.getVersionsForAvailableDeltaLog
         val expectedVersions = Some(11l, 13l)
+        val checkDeltaLogVersion = changeDataFeedHelper.checkEarliestDeltaFileBetweenVersions
+        checkDeltaLogVersion.get should equal (11l,13l)
         actualVersions should equal(expectedVersions)
         val actualDF = changeDataFeedHelper.readCDFIgnoreMissingDeltaLog
         actualDF.select("_commit_version").distinct().count() should equal(3l)
@@ -67,6 +69,8 @@ class ChangeDataFeedHelperSpec extends AnyFunSpec
         val changeDataFeedHelper = ChangeDataFeedHelper(writePath, 0, 5)
         val validVersions = changeDataFeedHelper.getVersionsForAvailableDeltaLog
         val expectedVersion = Some(10l, 15l)
+        val checkDeltaLogVersion = changeDataFeedHelper.checkEarliestDeltaFileBetweenVersions
+        checkDeltaLogVersion.get should equal (1l,15l)
         validVersions should equal(expectedVersion)
         val actualDF = changeDataFeedHelper.readCDFIgnoreMissingDeltaLog
         actualDF.select("_commit_version").distinct().count() should equal(6l)
