@@ -352,6 +352,60 @@ The result will be the following:
 Seq("firstname","lastname")
 ```
 
+### Delete rows from Deltatable where exists in an other Dataframe
+The function `deleteFromAnotherDataframe` delete rows from existing delta table where rows exists in an another Dataframe.
+Let's see an example of how it works.
+
+Suppose we have the following delta table:
+
+```
++----+---------+---------+----------+
+|  id|firstname| lastname|      City|
++----+---------+---------+----------+
+|   1|   Benito|  Jackson|     Paris| # this row will be deleted
+|   2|    Maria|   Willis|    London|
+|   3|     Jose| Travolta|    Mexico|
+|   4|    Maria|     Pitt|    Madrid|
+|   6|     Nora|   Fatehi| Marrakech|
++----+---------+---------+----------+
+```
+And we want to delete rows with (id and firstname) values equals to (id and firstname) in this dataframe:
+
+```
++----+---------+---------+---------------------------------+
+|  id|firstname| lastname| unique_id                       |
++----+---------+---------+---------------------------------+
+|   1|   Benito|  Jackson| cad17f15341ed95539e098444a4c8050|
+|   4|    Brad |   Willis| 3e1e9709234c6250c74241d5886d5073|
+|   5|   George| Travolta| 1f1ac7f74f43eff911a92f7e28069271|
++----+---------+---------+---------------------------------+
+```
+
+We can use the following function to delete rows from delta Table where column id of deltaTable is equals to id of Dataframe and column firstname of deltTable is equals to firstname of Dataframe.
+the attrColNameOper must be a MAP of (columnName,Operator).
+Operator can be "=" ,"!=" ,">" ,"<>" or "<"...
+
+```scala
+DeltaHelpers.deleteFromAnotherDataframe(
+  deltaTable = deltaTable,
+  sourceDF = sourceDF,
+  attrColNameOper = Map(("id","="),("firstname","="))
+  )
+```
+
+The result of delta table will be the following:
+
+```
++----+---------+---------+----------+
+|  id|firstname| lastname|      City|
++----+---------+---------+----------+
+|   2|    Maria|   Willis|    London|
+|   3|     Jose| Travolta|    Mexico|
+|   4|    Maria|     Pitt|    Madrid|
+|   6|     Nora|   Fatehi| Marrakech|
++----+---------+---------+----------+
+```
+
 
 ## How to contribute
 We welcome contributions to this project, to contribute checkout our [CONTRIBUTING.md](CONTRIBUTING.md) file.

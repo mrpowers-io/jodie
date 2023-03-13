@@ -754,7 +754,11 @@ class DeltaHelperSpec
       ).toDF("id", "firstname", "lastname", "unique_id")
 	  
       
-      val result = DeltaHelpers.deleteFromAnotherDataframe(deltaTable,sourceDF,Map(("id","="),("firstname","=")))
+      val result = DeltaHelpers.deleteFromAnotherDataframe(
+                  deltaTable,
+                  sourceDF,
+                  Map(("id","="),("firstname","="))
+                  )
 	  var resultDF = DeltaTable.forPath(path).toDF
 	  
 	  val expectedDF = Seq(
