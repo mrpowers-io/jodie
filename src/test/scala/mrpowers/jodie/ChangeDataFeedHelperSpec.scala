@@ -38,7 +38,7 @@ class ChangeDataFeedHelperSpec extends AnyFunSpec
 
     describe("should return provided versions as valid when") {
       it("Case I - Delta Log is deleted : version is above 10 and checkpoint is present but version 0.json is deleted") {
-        setUp("valid_snapshot", snapshotDF, path, updates)
+        createAndMerge("valid_snapshot", snapshotDF, path, updates)
         Files.deleteIfExists(Paths.get(FileNames.deltaFile(new Path(writePath + "/_delta_log"), 0).toString))
         val changeDataFeedHelper = ChangeDataFeedHelper(writePath, 11, 13)
         val actualVersions = changeDataFeedHelper.getVersionsForAvailableDeltaLog
@@ -53,7 +53,7 @@ class ChangeDataFeedHelperSpec extends AnyFunSpec
 
       }
       it("All Cases Combined : dryRun API usage to check no CDF read issues exist") {
-        setUp("dry_run_snapshot", snapshotDF, path, updates)
+        createAndMerge("dry_run_snapshot", snapshotDF, path, updates)
         val expected = ChangeDataFeedHelper(writePath, 9, 13)
         val actual = expected.dryRun()
         actual should equal(expected)
@@ -64,7 +64,7 @@ class ChangeDataFeedHelperSpec extends AnyFunSpec
     describe("should not return provided versions and return actual queryable versions that work when") {
       it("Case I - Delta Log is deleted : version is below 10 and 000.json is deleted") {
         val name = "invalid_snapshot"
-        setUp(name, snapshotDF, path, updates)
+        createAndMerge(name, snapshotDF, path, updates)
         Files.deleteIfExists(Paths.get(FileNames.deltaFile(new Path(writePath + "/_delta_log"), 0).toString))
         val changeDataFeedHelper = ChangeDataFeedHelper(writePath, 0, 5)
         val validVersions = changeDataFeedHelper.getVersionsForAvailableDeltaLog
@@ -76,7 +76,7 @@ class ChangeDataFeedHelperSpec extends AnyFunSpec
         actualDF.select("_commit_version").distinct().count() should equal(6l)
       }
       it("Case II - CDC is deleted : underlying data is deleted from _change_data folder") {
-        setUp("cdc_snapshot", snapshotDF, path, updates)
+        createAndMerge("cdc_snapshot", snapshotDF, path, updates)
         val firstVersion = FileNames.deltaFile(new Path(writePath + "/_delta_log"), 1).toString
         val row = spark.read.json(firstVersion).select("cdc.path")
           .filter("cdc is not null").take(1)(0)
@@ -91,7 +91,7 @@ class ChangeDataFeedHelperSpec extends AnyFunSpec
       }
       it("Case II - CDC is deleted : underlying data is deleted from _change_data folder and has a fake delete resulting in a no op merge") {
         val name = "cdc_delete_snapshot"
-        noOpDelete(name, setUp(name, snapshotDF, path, updates), updates.take(4), false)
+        noOpDelete(name, createAndMerge(name, snapshotDF, path, updates), updates.take(4), false)
         val eighteenth = FileNames.deltaFile(new Path(writePath + "/_delta_log"), 15).toString
         val row = spark.read.json(eighteenth).select("cdc.path")
           .filter("cdc is not null").take(1)(0)
@@ -125,13 +125,25 @@ class ChangeDataFeedHelperSpec extends AnyFunSpec
           val actualDF = changeDataFeedHelper.readCDFIgnoreMissingRangesForEDR.get
           actualDF.select("_commit_version").distinct().count() should equal(11l)
         }
+        it("Case III - When CDF is disabled, then re-enabled just for one version and then disabled ") {
+          val name = "edr_odd_snapshot"
+          val table = createAndMerge(name, snapshotDF,path, updates.take(3))
+          setCDF(name, false)
+          executeMergeFor(name, table, updates.take(3))
+          setCDF(name, true)
+          executeMergeFor(name, table, updates.take(1))
+          setCDF(name, false)
+          executeMergeFor(name, table, updates.take(3))
+          val actual = ChangeDataFeedHelper(writePath, 0, 15).getRangesForCDFEnabledVersions
+          actual should equal(Some(List((0,3),(8,9))))
+        }
       }
     }
 
-    describe("should not return any versions when") {
+    describe("should not return any versions when failure scenario happens for") {
       it("Case I - Delta Log is available but CDF is disabled between versions") {
         val name = "cdf_disabled_snapshot"
-        val table = setUp(name, snapshotDF, path, updates.take(3))
+        val table = createAndMerge(name, snapshotDF, path, updates.take(3))
         setCDF(name, false)
         executeMergeFor(name, table, updates.slice(4, 6))
         val cdfhEnd = ChangeDataFeedHelper(writePath, 0, 6)
@@ -154,7 +166,7 @@ class ChangeDataFeedHelperSpec extends AnyFunSpec
       }
       it("Case II - All CDC data has been purged due to vacuum or deleted manually") {
         val name = "cdf_deleted_snapshot"
-        val table = setUp(name, snapshotDF, path, updates.take(3))
+        val table = createAndMerge(name, snapshotDF, path, updates.take(3))
         val changeDataDir = os.pwd / "tmp" / "delta-cdf-edr" / name / "_change_data"
         os.remove.all(changeDataDir)
         val mayBeVersion = ChangeDataFeedHelper(writePath, 0, 3).getVersionsForAvailableCDC
@@ -162,7 +174,7 @@ class ChangeDataFeedHelperSpec extends AnyFunSpec
       }
       it("Case II - CDC Data is deleted but CDF is disabled between versions so the check doesn't complete") {
         val name = "cdc_disabled_snapshot"
-        val table = setUp(name, snapshotDF, path, updates.take(3))
+        val table = createAndMerge(name, snapshotDF, path, updates.take(3))
         setCDF(name, false)
         executeMergeFor(name, table, updates.slice(4, 6))
         val changeDataDir = os.pwd / "tmp" / "delta-cdf-edr" / name / "_change_data"
@@ -171,14 +183,29 @@ class ChangeDataFeedHelperSpec extends AnyFunSpec
           ChangeDataFeedHelper(writePath, 0, 6).getVersionsForAvailableCDC
         }
       }
+      it("Case III - When CDF is disabled immediately after 1st version and no version ranges are available") {
+        val name = "edr_disabled_snapshot"
+        val table = createDeltaTable(name, snapshotDF, path)
+        setCDF(name, false)
+        executeMergeFor(name, table, updates.take(3))
+        val actual = ChangeDataFeedHelper(writePath, 0, 3).getRangesForCDFEnabledVersions
+        actual should equal(None)
+      }
+      it("dryRun finds problematic versions") {
+        val name = "dryrun_failure_snapshot"
+        val table = createDeltaTable(name, snapshotDF, path)
+        setCDF(name, false)
+        executeMergeFor(name, table, updates.take(3))
+        assertThrows[AssertionError] {
+          val actual = ChangeDataFeedHelper(writePath, 0, 3).dryRun()
+        }
+      }
     }
   }
 
-  def setCDF(tableName: String, flag: Boolean) = {
-    //spark.sql("SHOW TBLPROPERTIES default.snapshot  ").show(false)
+  def setCDF(tableName: String, flag: Boolean) =
     spark.sql(s"ALTER TABLE default.${tableName} SET TBLPROPERTIES (delta.enableChangeDataFeed = $flag)")
-    //spark.sql("SHOW TBLPROPERTIES default.snapshot  ").show(false)
-  }
+
 
   def noOpDelete(tableName: String, deltaTable: DeltaTable, updates: List[(Int, String, Int)], lastOp: Boolean) = {
     import spark.implicits._
@@ -194,16 +221,18 @@ class ChangeDataFeedHelperSpec extends AnyFunSpec
     executeMergeFor(tableName, deltaTable, updates)
   }
 
-  def setUp(tableName: String, snapshotDF: DataFrame, path: String, updates: List[(Int, String, Int)]) = {
+  def createAndMerge(tableName: String, snapshotDF: DataFrame, path: String, updates: List[(Int, String, Int)]) =
+    executeMergeFor(tableName, createDeltaTable(tableName, snapshotDF, path), updates)
+
+  def createDeltaTable(tableName: String, snapshotDF: DataFrame, path: String) = {
     writePath = path + "/" + tableName
     snapshotDF.write.format("delta").save(writePath)
-    val table = DeltaTable.forPath(writePath)
     spark.sql(s"CREATE TABLE default.${tableName} USING DELTA LOCATION  '${writePath}' ")
-    executeMergeFor(tableName, table, updates)
+    DeltaTable.forPath(writePath)
   }
 
   def setUpForEDR(tableName: String, snapshotDF: DataFrame, path: String, updates: List[(Int, String, Int)], lastOp: Boolean) = {
-    val table = setUp(tableName, snapshotDF, path, updates.take(3))
+    val table = createAndMerge(tableName, snapshotDF, path, updates.take(3))
     setCDF(tableName, false)
     executeMergeFor(tableName, table, updates.slice(4, 6))
     setCDF(tableName, true)

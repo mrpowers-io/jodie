@@ -13,6 +13,7 @@ trait SparkSessionTestWrapper {
       .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
       .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
       .config("spark.sql.warehouse.dir", (os.pwd / "tmp").toString())
+      .config( "spark.driver.host", "localhost" )
       .appName("spark session")
       .getOrCreate()
   }

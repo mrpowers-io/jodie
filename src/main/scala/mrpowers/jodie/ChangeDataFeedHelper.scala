@@ -54,9 +54,6 @@ case class ChangeDataFeedHelper(path: String, startingVersion: Long, endingVersi
     versionRanges <- getRangesForCDFEnabledVersions
   } yield versionRanges.map(x => readCDF(path, x._1, x._2)).reduce(_ union _)
 
-  //    getRangesForCDFEnabledVersions
-  //    .map(x => readCDF(path, x._1, x._2)).reduce(_ union _)
-
   /** *
    * Finds the valid versions between which CDF is available and runs time travel query on top of it. [[startingVersion]]
    * will generally be affected if Delta Log is deleted or CDF is disabled for the same
@@ -164,13 +161,13 @@ case class ChangeDataFeedHelper(path: String, startingVersion: Long, endingVersi
   }
 
   /** *
-   * Gets the versions for which CDC data is available. Actually checks the presence of files in delta directory
-   * Operations may be time-consuming and memory intensive based on Driver if lot of versions need to be verified.
-   * Relies on the vacuum operation completion i.e. if a vacuum operation completed successfully, then checking just one
-   * file per version from the _change_data folder should be sufficient. Quits the operation as soon as first file is found
-   * in the _change_data directory as vacuum assures further CDC for upcoming versions would be available, if not deleted
-   * manually. The obvious marker exception to call this method is [[java.io.FileNotFoundException]], this is thrown
-   * when you run the time travel query and underlying data is deleted.
+   * Gets the versions for which CDC data is available by checking the presence of files in delta directory
+   * Operations may be time-consuming and memory intensive based on driver memory if lot of versions need to be verified.
+   * Relies on the successful completion of vacuum operation completion, thus checking just one file per version from
+   * the _change_data folder should be sufficient. Quits the operation as soon as first file is found in the _change_data
+   * directory as vacuum assures further CDC for upcoming versions would be available, if not deleted manually. The
+   * obvious marker exception to call this method is [[java.io.FileNotFoundException]], this is thrown when you run the
+   * time travel query and underlying data is deleted.
    *
    * @return Example : Some(3,6) - versions for which CDC is present in _change_data folder
    */
@@ -228,6 +225,7 @@ case class ChangeDataFeedHelper(path: String, startingVersion: Long, endingVersi
    */
   def groupVersionsInclusive(versions: List[Long]) = versions.size match {
     case 0 => None
+    case 1 => None
     case _ =>
       var pVersion = versions.head
       var sVersion = versions.head
