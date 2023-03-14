@@ -17,7 +17,7 @@ You can find the spark-daria releases for different Scala versions:
 * [Scala 2.12 versions here](https://repo1.maven.org/maven2/com/github/mrpowers/jodie_2.12/)
 * [Scala 2.13 versions here](https://repo1.maven.org/maven2/com/github/mrpowers/jodie_2.13/)
 
-## Delta
+## Delta Helpers
 
 ### Type 2 SCDs
 
@@ -352,6 +352,110 @@ The result will be the following:
 Seq("firstname","lastname")
 ```
 
+## Change Data Feed Helpers
+
+### CASE I - When Delta aka Transaction Log gets purged
+
+`getVersionsForAvailableDeltaLog` - helps you find the versions within the `[startingVersion,endingVersion]`range for which Delta Log is present and CDF read is enabled (only for the start version) and possible
+```scala
+ChangeDataFeedHelper(deltaPath, 0, 5).getVersionsForAvailableDeltaLog
+```
+The result will return the same versions `Some(0,5)` if Delta Logs are present. Otherwise, it will return say `Some(10,15)` - the earliest queryable start version and latest snapshot version as ending version. If at any point within versions it finds that EDR is disabled, it returns a `None`.
+
+`readCDFIgnoreMissingDeltaLog` - Returns an Option of Spark Dataframe for all versions provided by the above method
+```scala
+ChangeDataFeedHelper(deltaPath, 11, 13).readCDFIgnoreMissingDeltaLog.get.show(false)
+
++---+------+---+----------------+---------------+-------------------+
+|id |gender|age|_change_type    |_commit_version|_commit_timestamp  |
++---+------+---+----------------+---------------+-------------------+
+|4  |Female|25 |update_preimage |11             |2023-03-13 14:21:58|
+|4  |Other |45 |update_postimage|11             |2023-03-13 14:21:58|
+|2  |Male  |45 |update_preimage |13             |2023-03-13 14:22:05|
+|2  |Other |67 |update_postimage|13             |2023-03-13 14:22:05|
+|2  |Other |67 |update_preimage |12             |2023-03-13 14:22:01|
+|2  |Male  |45 |update_postimage|12             |2023-03-13 14:22:01|
++---+------+---+----------------+---------------+-------------------+
+```
+Resultant Dataframe is the same as the result of CDF Time Travel query
+### CASE II - When CDC data gets purged in `_change_data` directory
+
+`getVersionsForAvailableCDC` - helps you find the versions within the `[startingVersion,endingVersion]`range for which underlying CDC data is present under `_change_data` directory. Call this method when java.io.FileNotFoundException is encountered during time travel
+```scala
+ChangeDataFeedHelper(deltaPath, 0, 5).getVersionsForAvailableCDC
+```
+The result will return the same versions `Some(0,5)` if CDC data is present for the given versions under `_change_data` directory. Otherwise, it will return `Some(2,5)` - the earliest queryable start version for which CDC is present and given ending version. If no version is found that has CDC data available, it returns a `None`.
+ 
+
+`readCDFIgnoreMissingCDC` - Returns an Option of Spark Dataframe for all versions provided by the above method
+```scala
+ChangeDataFeedHelper(deltaPath, 11, 13).readCDFIgnoreMissingCDC.show(false)
+
++---+------+---+----------------+---------------+-------------------+
+|id |gender|age|_change_type    |_commit_version|_commit_timestamp  |
++---+------+---+----------------+---------------+-------------------+
+|4  |Female|25 |update_preimage |11             |2023-03-13 14:21:58|
+|4  |Other |45 |update_postimage|11             |2023-03-13 14:21:58|
+|2  |Male  |45 |update_preimage |13             |2023-03-13 14:22:05|
+|2  |Other |67 |update_postimage|13             |2023-03-13 14:22:05|
+|2  |Other |67 |update_preimage |12             |2023-03-13 14:22:01|
+|2  |Male  |45 |update_postimage|12             |2023-03-13 14:22:01|
++---+------+---+----------------+---------------+-------------------+
+```
+Resultant Dataframe is the same as the result of CDF Time Travel query
+
+### CASE III - Enable-Disable-Re-enable CDF
+
+`getRangesForCDFEnabledVersions`- Skip all versions for which CDF was disabled and get all ranges for which CDF was enabled and time travel is possible within a `[startingVersion,endingVersion]`range
+```scala
+ ChangeDataFeedHelper(writePath, 0, 30).getRangesForCDFEnabledVersions
+```
+The result will look like `List((0, 3), (7, 8), (12, 20))` signifying all version ranges for which CDF is enabled. The function `getRangesForCDFDisabledVersions` returns exactly same `List` but this time it returns disabled version ranges.
+
+`readCDFIgnoreMissingRangesForEDR`- Returns an Option of unionised Spark Dataframe for all version ranges provided by the above method
+```scala
+ ChangeDataFeedHelper(writePath, 0, 30).readCDFIgnoreMissingRangesForEDR
++---+------+---+----------------+---------------+-------------------+
+|id |gender|age|_change_type    |_commit_version|_commit_timestamp  |
++---+------+---+----------------+---------------+-------------------+
+|2  |Male  |25 |update_preimage |2              |2023-03-13 14:40:48|
+|2  |Male  |100|update_postimage|2              |2023-03-13 14:40:48|
+|1  |Male  |25 |update_preimage |1              |2023-03-13 14:40:44|
+|1  |Male  |35 |update_postimage|1              |2023-03-13 14:40:44|
+|2  |Male  |100|update_preimage |3              |2023-03-13 14:40:52|
+|2  |Male  |101|update_postimage|3              |2023-03-13 14:40:52|
+|1  |Male  |25 |insert          |0              |2023-03-13 14:40:34|
+|2  |Male  |25 |insert          |0              |2023-03-13 14:40:34|
+|3  |Female|35 |insert          |0              |2023-03-13 14:40:34|
+|2  |Male  |101|update_preimage |8              |2023-03-13 14:41:07|
+|2  |Other |66 |update_postimage|8              |2023-03-13 14:41:07|
+|2  |Other |66 |update_preimage |13             |2023-03-13 14:41:24|
+|2  |Other |67 |update_postimage|13             |2023-03-13 14:41:24|
+|2  |Other |67 |update_preimage |14             |2023-03-13 14:41:27|
+|2  |Other |345|update_postimage|14             |2023-03-13 14:41:27|
+|2  |Male  |100|update_preimage |20             |2023-03-13 14:41:46|
+|2  |Male  |101|update_postimage|20             |2023-03-13 14:41:46|
+|4  |Other |45 |update_preimage |15             |2023-03-13 14:41:30|
+|4  |Female|678|update_postimage|15             |2023-03-13 14:41:30|
+|1  |Other |55 |update_preimage |18             |2023-03-13 14:41:40|
+|1  |Male  |35 |update_postimage|18             |2023-03-13 14:41:40|
+|2  |Other |345|update_preimage |19             |2023-03-13 14:41:43|
+|2  |Male  |100|update_postimage|19             |2023-03-13 14:41:43|
++---+------+---+----------------+---------------+-------------------+
+```
+Resultant Dataframe is the same as the result of CDF Time Travel query but this time it will only have CDC for enabled versions ignoring all versions for which CDC was disabled.
+### Dry Run
+`dryRun`- This method works as a fail-safe to see if there are any CDF-related issues. If it doesn't throw any errors, then you can be certain the above-mentioned issues do not occur in your Delta Table for the given versions. When it does, it throws either an AssertionError or an IllegalStateException with appropriate error message
+
+`readCDF`- Plain old time travel query, this is literally the method definition, that's it
+```scala
+spark.read.format("delta").option("readChangeFeed","true").option("startingVersion",0).("endingVersion",20).load(gcs_path)
+```
+Pair `dryRun` with `readCDF` to detect any CDF errors in your Delta Table
+```scala
+ChangeDataFeedHelper(writePath, 9, 13).dryRun().readCDF
+```
+If no error found, it will return a similar Spark Dataframe with CDF between given versions. 
 
 ## How to contribute
 We welcome contributions to this project, to contribute checkout our [CONTRIBUTING.md](CONTRIBUTING.md) file.
