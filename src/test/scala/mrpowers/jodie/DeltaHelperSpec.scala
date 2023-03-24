@@ -664,7 +664,7 @@ class DeltaHelperSpec
         .save(path)
 
       val deltaTable = DeltaTable.forPath(path)
-      val result     = DeltaHelpers.findCompositeKeyCandidate(deltaTable, Seq("id"))
+      val result = DeltaHelpers.findCompositeKeyCandidate(deltaTable, Seq("id"))
 
       assertResult(Nil)(result)
     }
@@ -683,8 +683,8 @@ class DeltaHelperSpec
         .mode("overwrite")
         .save(path)
       val deltaTable = DeltaTable.forPath(path)
-      val result     = DeltaHelpers.findCompositeKeyCandidate(deltaTable, Seq("id"))
-      val expected   = Seq("firstname", "lastname")
+      val result = DeltaHelpers.findCompositeKeyCandidate(deltaTable, Seq("id"))
+      val expected = Seq("firstname", "lastname")
       assertResult(expected)(result)
     }
 
@@ -703,8 +703,8 @@ class DeltaHelperSpec
         .option("delta.logRetentionDuration", "interval 30 days")
         .save(path)
       val deltaTable = DeltaTable.forPath(path)
-      val result     = DeltaHelpers.findCompositeKeyCandidate(deltaTable)
-      val expected   = Seq("id")
+      val result = DeltaHelpers.findCompositeKeyCandidate(deltaTable)
+      val expected = Seq("id")
       assertResult(expected)(result)
     }
   }
@@ -756,12 +756,12 @@ class DeltaHelperSpec
         (3, "Jose", "Travolta", "1f1ac7f74f43eff911a92f7e28069271")
       ).toDF("id", "firstname", "lastname", "unique_id")
 
+
       assertSmallDataFrameEquality(
         actualDF = resultDF,
         expectedDF = expectedDF,
         ignoreNullable = true,
-        orderedComparison = false
-      )
+        orderedComparison = false)
     }
   }
 }

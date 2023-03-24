@@ -203,7 +203,7 @@ object DeltaHelpers {
     if (compositeKey.isEmpty)
       throw new NoSuchElementException("The attribute compositeKey must not be empty")
 
-    val mergeCondition    = compositeKey.map(c => s"old.$c = new.$c").mkString(" AND ")
+    val mergeCondition = compositeKey.map(c => s"old.$c = new.$c").mkString(" AND ")
     val appendDataCleaned = appendData.dropDuplicates(compositeKey)
     deltaTable
       .alias("old")
@@ -238,17 +238,17 @@ object DeltaHelpers {
   }
 
   def withMD5Columns(
-      dataFrame: DataFrame,
-      cols: List[String],
-      newColName: String = ""
-  ): DataFrame = {
+                      dataFrame: DataFrame,
+                      cols: List[String],
+                      newColName: String = ""
+                    ): DataFrame = {
     val outputCol = if (newColName.isEmpty) cols.mkString("_md5", "", "") else newColName
     dataFrame.withColumn(outputCol, md5(concat_ws("||", cols.map(c => col(c)): _*)))
   }
 
   def withMD5Columns(
-      deltaTable: DeltaTable,
-      cols: List[String],
-      newColName: String
-  ): DataFrame = withMD5Columns(deltaTable.toDF, cols, newColName)
+                      deltaTable: DeltaTable,
+                      cols: List[String],
+                      newColName: String
+                    ): DataFrame = withMD5Columns(deltaTable.toDF, cols, newColName)
 }
