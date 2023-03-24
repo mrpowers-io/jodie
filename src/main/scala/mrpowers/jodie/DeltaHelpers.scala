@@ -1,6 +1,6 @@
 package mrpowers.jodie
 
-import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession}
+import org.apache.spark.sql.{DataFrame, Row, SaveMode, SparkSession}
 import io.delta.tables._
 import org.apache.spark.sql.expressions.Window.partitionBy
 import org.apache.spark.sql.functions.{col, concat_ws, count, md5, row_number}
@@ -17,6 +17,17 @@ object DeltaHelpers {
       .select("version")
       .head()(0)
       .asInstanceOf[Long]
+  }
+
+  def deltaFileSizes(deltaTable: DeltaTable) = {
+    val details: Row = deltaTable.detail().select("numFiles", "sizeInBytes").collect()(0)
+    val (sizeInBytes, numberOfFiles) =
+      (details.getAs[Long]("sizeInBytes"), details.getAs[Long]("numFiles"))
+    Map(
+      "size_in_bytes"              -> sizeInBytes,
+      "number_of_files"            -> numberOfFiles,
+      "average_file_size_in_bytes" -> Math.round(sizeInBytes / numberOfFiles)
+    )
   }
 
   /**
@@ -192,7 +203,7 @@ object DeltaHelpers {
     if (compositeKey.isEmpty)
       throw new NoSuchElementException("The attribute compositeKey must not be empty")
 
-    val mergeCondition = compositeKey.map(c => s"old.$c = new.$c").mkString(" AND ")
+    val mergeCondition    = compositeKey.map(c => s"old.$c = new.$c").mkString(" AND ")
     val appendDataCleaned = appendData.dropDuplicates(compositeKey)
     deltaTable
       .alias("old")
@@ -227,17 +238,17 @@ object DeltaHelpers {
   }
 
   def withMD5Columns(
-                      dataFrame: DataFrame,
-                      cols: List[String],
-                      newColName: String = ""
-                    ): DataFrame = {
+      dataFrame: DataFrame,
+      cols: List[String],
+      newColName: String = ""
+  ): DataFrame = {
     val outputCol = if (newColName.isEmpty) cols.mkString("_md5", "", "") else newColName
     dataFrame.withColumn(outputCol, md5(concat_ws("||", cols.map(c => col(c)): _*)))
   }
 
   def withMD5Columns(
-                      deltaTable: DeltaTable,
-                      cols: List[String],
-                      newColName: String
-                    ): DataFrame = withMD5Columns(deltaTable.toDF, cols, newColName)
+      deltaTable: DeltaTable,
+      cols: List[String],
+      newColName: String
+  ): DataFrame = withMD5Columns(deltaTable.toDF, cols, newColName)
 }

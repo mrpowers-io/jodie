@@ -6,8 +6,7 @@ import io.delta.tables.DeltaTable
 import org.apache.spark.sql.types.{IntegerType, StringType}
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.funspec.AnyFunSpec
-
-import scala.util.{Failure, Success}
+import org.scalatest.matchers.should.Matchers.{convertToAnyShouldWrapper, equal}
 
 class DeltaHelperSpec
     extends AnyFunSpec
@@ -22,6 +21,42 @@ class DeltaHelperSpec
 
   import spark.implicits._
 
+  describe("When Delta table is queried for file sizes"){
+    it("should provide delta file sizes successfully") {
+      val path = (os.pwd / "tmp" / "delta-table").toString()
+      val df = Seq(
+        (1, "Benito", "Jackson"),
+        (2, "Maria", "Willis"),
+        (3, "Jose", "Travolta"),
+        (4, "Benito", "Jackson"),
+        (5, "Jose", "Travolta"),
+        (6, "Jose", "Travolta"),
+        (7, "Maria", "Pitt")
+      ).toDF("id", "firstname", "lastname")
+      df.write.format("delta").mode("overwrite").save(path)
+
+      val deltaTable = DeltaTable.forPath(path)
+      val actual = DeltaHelpers.deltaFileSizes(deltaTable)
+
+      actual("size_in_bytes") should equal(1088L)
+      actual("number_of_files") should equal(1L)
+      actual("average_file_size_in_bytes") should equal(1088L)
+    }
+
+    it("should provide delta file sizes successfully even when dataframe is empty") {
+      val path = (os.pwd / "tmp" / "delta-table-empty").toString()
+      val df = Seq.empty[(Int, String, String)].toDF("id", "firstname", "lastname")
+      df.write.format("delta").mode("overwrite").save(path)
+
+      val deltaTable = DeltaTable.forPath(path)
+      val duplicateColumns = Seq("firstname", "lastname")
+      val actual = DeltaHelpers.deltaFileSizes(deltaTable)
+
+      actual("size_in_bytes") should equal(482)
+      actual("number_of_files") should equal(1)
+      actual("average_file_size_in_bytes") should equal(482)
+    }
+  }
   describe("remove duplicate records from delta table") {
     it("should remove duplicates successful") {
       val path = (os.pwd / "tmp" / "delta-duplicate").toString()
@@ -391,7 +426,7 @@ class DeltaHelperSpec
       ).toDF("id", "firstname", "lastname")
       df.write.format("delta").mode("overwrite").save(path)
       val deltaTable = DeltaTable.forPath(path)
-      val result = DeltaHelpers.getStorageLocation(deltaTable)
+      val result     = DeltaHelpers.getStorageLocation(deltaTable)
       assertResult(s"file:$path")(result)
     }
   }
@@ -613,8 +648,8 @@ class DeltaHelperSpec
 
   }
 
-  describe("find composite key in a table"){
-    it("should not find the composite key in the table"){
+  describe("find composite key in a table") {
+    it("should not find the composite key in the table") {
       val path = (os.pwd / "tmp" / "delta-tbl").toString()
       Seq(
         (1, "Benito", "Jackson"),
@@ -629,12 +664,12 @@ class DeltaHelperSpec
         .save(path)
 
       val deltaTable = DeltaTable.forPath(path)
-      val result = DeltaHelpers.findCompositeKeyCandidate(deltaTable,Seq("id"))
+      val result     = DeltaHelpers.findCompositeKeyCandidate(deltaTable, Seq("id"))
 
       assertResult(Nil)(result)
     }
 
-    it("should find the composite key in the table"){
+    it("should find the composite key in the table") {
       val path = (os.pwd / "tmp" / "delta-tbl").toString()
       Seq(
         (1, "Benito", "Jackson"),
@@ -648,12 +683,12 @@ class DeltaHelperSpec
         .mode("overwrite")
         .save(path)
       val deltaTable = DeltaTable.forPath(path)
-      val result = DeltaHelpers.findCompositeKeyCandidate(deltaTable,Seq("id"))
-      val expected = Seq("firstname","lastname")
+      val result     = DeltaHelpers.findCompositeKeyCandidate(deltaTable, Seq("id"))
+      val expected   = Seq("firstname", "lastname")
       assertResult(expected)(result)
     }
 
-    it("should find the composite key in the table when cols are excluded"){
+    it("should find the composite key in the table when cols are excluded") {
       val path = (os.pwd / "tmp" / "delta-tbl").toString()
       Seq(
         (1, "Benito", "Jackson"),
@@ -668,8 +703,8 @@ class DeltaHelperSpec
         .option("delta.logRetentionDuration", "interval 30 days")
         .save(path)
       val deltaTable = DeltaTable.forPath(path)
-      val result = DeltaHelpers.findCompositeKeyCandidate(deltaTable)
-      val expected = Seq("id")
+      val result     = DeltaHelpers.findCompositeKeyCandidate(deltaTable)
+      val expected   = Seq("id")
       assertResult(expected)(result)
     }
   }
@@ -721,12 +756,12 @@ class DeltaHelperSpec
         (3, "Jose", "Travolta", "1f1ac7f74f43eff911a92f7e28069271")
       ).toDF("id", "firstname", "lastname", "unique_id")
 
-
       assertSmallDataFrameEquality(
         actualDF = resultDF,
         expectedDF = expectedDF,
         ignoreNullable = true,
-        orderedComparison = false)
+        orderedComparison = false
+      )
     }
   }
 }
