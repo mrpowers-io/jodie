@@ -23,11 +23,8 @@ object DeltaHelpers {
     val details: Row = deltaTable.detail().select("numFiles", "sizeInBytes").collect()(0)
     val (sizeInBytes, numberOfFiles) =
       (details.getAs[Long]("sizeInBytes"), details.getAs[Long]("numFiles"))
-    Map(
-      "size_in_bytes"              -> sizeInBytes,
-      "number_of_files"            -> numberOfFiles,
-      "average_file_size_in_bytes" -> Math.round(sizeInBytes / numberOfFiles)
-    )
+    val avgFileSizeInBytes = if (numberOfFiles == 0) 0 else Math.round(sizeInBytes / numberOfFiles)
+    Map("size_in_bytes" -> sizeInBytes, "number_of_files" -> numberOfFiles, "average_file_size_in_bytes" -> avgFileSizeInBytes)
   }
 
   /**

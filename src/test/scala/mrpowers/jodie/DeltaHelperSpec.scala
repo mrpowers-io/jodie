@@ -21,7 +21,7 @@ class DeltaHelperSpec
 
   import spark.implicits._
 
-  describe("When Delta table is queried for file sizes"){
+  describe("When Delta table is queried for file sizes") {
     it("should provide delta file sizes successfully") {
       val path = (os.pwd / "tmp" / "delta-table").toString()
       val df = Seq(
@@ -43,18 +43,30 @@ class DeltaHelperSpec
       actual("average_file_size_in_bytes") should equal(1088L)
     }
 
-    it("should provide delta file sizes successfully even when dataframe is empty") {
+    it("should provide delta file sizes successfully even when dataframe used to create such table is empty") {
       val path = (os.pwd / "tmp" / "delta-table-empty").toString()
       val df = Seq.empty[(Int, String, String)].toDF("id", "firstname", "lastname")
       df.write.format("delta").mode("overwrite").save(path)
 
       val deltaTable = DeltaTable.forPath(path)
-      val duplicateColumns = Seq("firstname", "lastname")
       val actual = DeltaHelpers.deltaFileSizes(deltaTable)
 
       actual("size_in_bytes") should equal(482)
       actual("number_of_files") should equal(1)
       actual("average_file_size_in_bytes") should equal(482)
+    }
+
+    it("should not fail if the table is empty") {
+      val emptyDeltaTable = DeltaTable.create(spark)
+        .tableName("delta_empty_table")
+        .addColumn("id", dataType = "INT")
+        .addColumn("firstname", dataType = "STRING")
+        .addColumn("lastname", dataType = "STRING")
+        .execute()
+      val actual = DeltaHelpers.deltaFileSizes(emptyDeltaTable)
+      actual("size_in_bytes") should equal(0)
+      actual("number_of_files") should equal(0)
+      actual("average_file_size_in_bytes") should equal(0)
     }
   }
   describe("remove duplicate records from delta table") {
