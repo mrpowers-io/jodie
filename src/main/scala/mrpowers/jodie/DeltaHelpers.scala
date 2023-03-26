@@ -5,6 +5,8 @@ import io.delta.tables._
 import org.apache.spark.sql.expressions.Window.partitionBy
 import org.apache.spark.sql.functions.{col, concat_ws, count, md5, row_number}
 
+import scala.collection.mutable
+
 object DeltaHelpers {
 
   /**
@@ -158,7 +160,7 @@ object DeltaHelpers {
 
     val insertStatement = deltaTable.toDF.write
       .format("delta")
-      .partitionBy(details.getAs[Seq[String]]("partitionColumns"): _*)
+      .partitionBy(details.getAs[mutable.ArraySeq[String]]("partitionColumns").toSeq: _*)
       .options(details.getAs[Map[String, String]]("properties"))
 
     (targetTableName, targetPath) match {

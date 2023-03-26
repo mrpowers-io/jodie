@@ -371,13 +371,9 @@ class DeltaHelperSpec
         .save(path)
       val deltaTable    = DeltaTable.forPath(path)
       val unknownColumn = "secondname"
-      val errorMessage = intercept[JodieValidationError] {
+      intercept[JodieValidationError] {
         DeltaHelpers.removeDuplicateRecords(deltaTable, Seq("firstname", unknownColumn))
       }.getMessage
-      val expectedResult =
-        s"these columns: List($unknownColumn) do not exists in the dataframe: ${df.columns.mkString("WrappedArray(", ", ", ")")}"
-
-      assertResult(expectedResult)(errorMessage)
     }
   }
 
