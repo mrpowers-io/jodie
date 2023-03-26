@@ -3,7 +3,7 @@ package mrpowers.jodie
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
-import org.apache.spark.sql.delta.actions.{AddCDCFile, Metadata}
+import org.apache.spark.sql.delta.actions.{AddCDCFile, CommitInfo, Metadata}
 import org.apache.spark.sql.delta.commands.cdc.CDCReader
 import org.apache.spark.sql.delta.commands.cdc.CDCReader.isCDCEnabledOnTable
 import org.apache.spark.sql.delta.util.FileNames
@@ -325,24 +325,36 @@ case class ChangeDataFeedHelper(
    * @return
    */
   def getCDFVersions(
-      deltaLog: DeltaLog,
-      startingVersion: Long,
-      endingVersion: Long
-  ): List[(Long, Boolean)] = {
+                      deltaLog: DeltaLog,
+                      startingVersion: Long,
+                      endingVersion: Long
+                    ): List[(Long, Boolean)] = {
     val changes = deltaLog.getChanges(startingVersion).takeWhile(_._1 <= endingVersion).toList
-    var prev    = false
+    var prev = false
     changes.map { case (v, actions) =>
-      val cdcEnabled = actions.exists {
-        case m: Metadata =>
-          prev = isCDCEnabledOnTable(m)
-          prev
+      val cdcEvaluated = actions.exists {
+        case m: Metadata => isCDCEnabledOnTable(m)
         case c: AddCDCFile => true
-        // can't simply return a false here, as previous state needs to be continued
-        // a no-op merge operation disrupts this state as cdc column(AddCDCFile) is not present
-        // So if we return false here, then an enabled CDF might look like it is disabled for a version
-        case _ => prev
+        case _ => false
       }
-      (v, cdcEnabled)
+      // Handle the case when no op takes place i.e. no delete/insert/update
+      // In this scenario, just carry forward the previous state
+      val isCDCEnabled = if (actions.size == 1 && actions.head.isInstanceOf[CommitInfo]) {
+        val commitInfo = actions.head.asInstanceOf[CommitInfo]
+        commitInfo.operationMetrics match {
+          case Some(metrics) =>
+            if (
+              metrics("numTargetRowsDeleted") == "0" &&
+                metrics("numTargetRowsInserted") == "0" &&
+                metrics("numTargetRowsUpdated") == "0"
+            )
+              prev
+            else cdcEvaluated
+          case None => cdcEvaluated
+        }
+      } else cdcEvaluated
+      prev = isCDCEnabled
+      (v, isCDCEnabled)
     }
   }
 
