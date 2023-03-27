@@ -352,6 +352,30 @@ The result will be the following:
 Seq("firstname","lastname")
 ```
 
+## Delta File Sizes
+
+The `deltaFileSizes` function returns a `Map[String,Long]` that contains the total size in bytes, the amount of files and the
+average file size for a given Delta Table.
+
+Suppose you have the following Delta Table, partitioned by `col1`:
+
+```
++----+----+----+
+|col1|col2|col3|
++----+----+----+
+|   1|   A|   A|
+|   2|   A|   B|
++----+----+----+
+```
+
+Running `DeltaHelpers.deltaFileSizes(deltaTable)` on that table will return:
+
+```scala
+Map("size_in_bytes" -> 1320,
+  "number_of_files" -> 2,
+  "average_file_size_in_bytes" -> 660)
+```
+
 ## Change Data Feed Helpers
 
 ### CASE I - When Delta aka Transaction Log gets purged
