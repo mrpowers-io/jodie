@@ -43,19 +43,6 @@ class DeltaHelperSpec
       actual("average_file_size_in_bytes") should equal(1088L)
     }
 
-    it("should provide delta file sizes successfully even when dataframe used to create such table is empty") {
-      val path = (os.pwd / "tmp" / "delta-table-empty").toString()
-      val df = Seq.empty[(Int, String, String)].toDF("id", "firstname", "lastname")
-      df.write.format("delta").mode("overwrite").save(path)
-
-      val deltaTable = DeltaTable.forPath(path)
-      val actual = DeltaHelpers.deltaFileSizes(deltaTable)
-
-      actual("size_in_bytes") should equal(482)
-      actual("number_of_files") should equal(1)
-      actual("average_file_size_in_bytes") should equal(482)
-    }
-
     it("should not fail if the table is empty") {
       val emptyDeltaTable = DeltaTable.create(spark)
         .tableName("delta_empty_table")
