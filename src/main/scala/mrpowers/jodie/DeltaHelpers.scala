@@ -1,6 +1,6 @@
 package mrpowers.jodie
 
-import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession}
+import org.apache.spark.sql.{DataFrame, Row, SaveMode, SparkSession}
 import io.delta.tables._
 import org.apache.spark.sql.expressions.Window.partitionBy
 import org.apache.spark.sql.functions.{col, concat_ws, count, md5, row_number}
@@ -19,6 +19,14 @@ object DeltaHelpers {
       .select("version")
       .head()(0)
       .asInstanceOf[Long]
+  }
+
+  def deltaFileSizes(deltaTable: DeltaTable) = {
+    val details: Row = deltaTable.detail().select("numFiles", "sizeInBytes").collect()(0)
+    val (sizeInBytes, numberOfFiles) =
+      (details.getAs[Long]("sizeInBytes"), details.getAs[Long]("numFiles"))
+    val avgFileSizeInBytes = if (numberOfFiles == 0) 0 else Math.round(sizeInBytes / numberOfFiles)
+    Map("size_in_bytes" -> sizeInBytes, "number_of_files" -> numberOfFiles, "average_file_size_in_bytes" -> avgFileSizeInBytes)
   }
 
   /**
