@@ -2,6 +2,7 @@ package mrpowers.jodie
 
 import com.github.mrpowers.spark.fast.tests.DataFrameComparer
 import io.delta.tables.DeltaTable
+import mrpowers.jodie.DeltaTestUtils.executeMergeFor
 import org.apache.hadoop.fs.Path
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.delta.util.FileNames
@@ -245,18 +246,5 @@ class ChangeDataFeedHelperSpec extends AnyFunSpec
     table
   }
 
-  def executeMergeFor(tableName: String, deltaTable: DeltaTable, updates: List[(Int, String, Int)]) = {
-    import spark.implicits._
-    updates.foreach(row => {
-      val dataFrame = Seq(row).toDF("id", "gender", "age")
-      deltaTable.as(tableName)
-        .merge(dataFrame.as("source"), s"${tableName}.id = source.id")
-        .whenMatched
-        .updateAll()
-        .whenNotMatched()
-        .insertAll()
-        .execute()
-    })
-    deltaTable
-  }
+
 }
