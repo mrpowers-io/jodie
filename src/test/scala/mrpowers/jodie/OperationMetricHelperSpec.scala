@@ -2,7 +2,8 @@ package mrpowers.jodie
 
 import com.github.mrpowers.spark.fast.tests.DataFrameComparer
 import io.delta.tables.DeltaTable
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.functions.desc
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.funspec.AnyFunSpec
 
@@ -53,10 +54,17 @@ class OperationMetricHelperSpec
       assertSmallDataFrameEquality(actualDF, expected)
     }
     it("should return valid metric for single partition column") {
-      partitionWithMerge("partitioned_snapshot", rows, updates, path)
-      val actual = OperationMetricHelper(writePath).getMetricsAsDF(" country = 'USA'")
+      val deltaTable           = partitionWithMerge("partitioned_snapshot", rows, updates, path)
+      val actual               = OperationMetricHelper(writePath).getMetricsAsDF(" country = 'USA'")
+      val versions: Array[Row] = getCountryVersions(deltaTable)
       val expected =
-        toVersionDF(Seq((4L, 0L, 0L, 1L, 1L), (3L, 0L, 0L, 1L, 1L), (0L, 0L, 2L, 0L, 2L)))
+        toVersionDF(
+          Seq(
+            (versions.head.getAs[Long]("version"), 0L, 0L, 1L, 1L),
+            (versions.tail.head.getAs[Long]("version"), 0L, 0L, 1L, 1L),
+            (0L, 0L, 2L, 0L, 2L)
+          )
+        )
       assertSmallDataFrameEquality(actual, expected)
     }
     it("should return valid metric for single partition column containing deletes and appends") {
@@ -69,15 +77,16 @@ class OperationMetricHelperSpec
         .mode("append")
         .partitionBy("country")
         .save(writePath)
-      val condition = " country = 'USA'"
-      val actual    = OperationMetricHelper(writePath).getMetricsAsDF(" country = 'USA'")
+      val condition            = " country = 'USA'"
+      val actual               = OperationMetricHelper(writePath).getMetricsAsDF(" country = 'USA'")
+      val versions: Array[Row] = getCountryVersions(deltaTable)
       val expected =
         toVersionDF(
           Seq(
             (6L, 0L, 1L, 0, 1L),
             (5L, 1L, 0L, 0L, 0L),
-            (4L, 0L, 0L, 1L, 1L),
-            (3L, 0L, 0L, 1L, 1L),
+            (versions.head.getAs[Long]("version"), 0L, 0L, 1L, 1L),
+            (versions.tail.head.getAs[Long]("version"), 0L, 0L, 1L, 1L),
             (0L, 0L, 2L, 0L, 2L)
           )
         )
@@ -113,6 +122,18 @@ class OperationMetricHelperSpec
         )
       assertSmallDataFrameEquality(actual, expected)
     }
+  }
+
+  private def getCountryVersions(deltaTable: DeltaTable) = {
+    val versionDF = deltaTable
+      .history()
+      .filter("operation == 'MERGE'")
+      .select("version", "operationParameters.predicate")
+      .filter("predicate like '%USA%'")
+      .orderBy(desc("version"))
+    assert(versionDF.count() == 2)
+    val versions = versionDF.take(2)
+    versions
   }
 
   private def partitionWithMerge(
