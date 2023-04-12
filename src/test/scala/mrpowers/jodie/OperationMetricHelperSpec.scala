@@ -96,12 +96,18 @@ class OperationMetricHelperSpec
       val actual = OperationMetricHelper(writePath).getMetricsAsDF(
         " country = 'USA' and gender = 'Female'"
       )
+      val versionDF = deltaTable
+        .history()
+        .filter(" version > 0 and version < 5")
+        .select("version", "operationParameters.predicate")
+        .filter("predicate like '%USA%' and predicate like '%Female%'")
+      assert(versionDF.count() == 1)
       val expected =
         toVersionDF(
           Seq(
             (6L, 0L, 1L, 0L, 1L),
             (5L, 1L, 0L, 0L, 0L),
-            (1L, 0L, 1L, 0L, 1L),
+            (versionDF.take(1).head.getAs[Long]("version"), 0L, 1L, 0L, 1L),
             (0L, 0L, 1L, 0L, 1L)
           )
         )
