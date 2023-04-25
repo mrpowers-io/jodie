@@ -1,62 +1,80 @@
 package mrpowers.jodie
 
-import mrpowers.jodie.delta.{DeleteMetric, MergeMetric, OperationMetrics, WriteMetric}
+import mrpowers.jodie.delta._
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.delta.util.FileNames
 import org.apache.spark.sql.delta.{DeltaHistory, DeltaLog}
-import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.functions.{col, from_json}
 import org.apache.spark.sql.types.{LongType, MapType, StringType, StructType}
-import org.apache.spark.sql.{DataFrame, Encoders, SparkSession}
+import org.apache.spark.sql.{Encoders, SparkSession}
 
 case class OperationMetricHelper(
     path: String,
     startingVersion: Long = 0,
     endingVersion: Option[Long] = None
-) {
-  val spark                 = SparkSession.active
-  val deltaLog              = DeltaLog.forTable(spark, path)
+)(implicit spark: SparkSession) {
+  private val deltaLog      = DeltaLog.forTable(spark, path)
   private val metricColumns = Seq("version", "deleted", "inserted", "updated", "source_rows")
 
-  def getMetricsAsDF(): DataFrame = {
+  /**
+   * The function returns operation metrics - count metric for either a provided partition condition
+   * or without one, provides the count metric for the entire Delta Table as a Spark Dataframe.
+   * +-------+-------+--------+-------+-----------+
+   * |version|deleted|inserted|updated|source_rows|
+   * +-------+-------+--------+-------+-----------+
+   * |6      |0      |108     |0      |108        |
+   * |5      |12     |0       |0      |0          |
+   * |4      |0      |0       |300    |300        |
+   * |3      |0      |100     |0      |100        |
+   * |2      |0      |150     |190    |340        |
+   * |1      |0      |0       |200    |200        |
+   * |0      |0      |400     |0      |400        |
+   * +-------+-------+--------+-------+-----------+
+   *
+   * @param partitionCondition
+   * @return
+   * [[org.apache.spark.sql.DataFrame]]
+   */
+  def getCountMetricsAsDF(partitionCondition: Option[String] = None) = {
     import spark.implicits._
-    getTransactionMetrics.toDF(metricColumns: _*)
+    getCountMetrics(partitionCondition).toDF(metricColumns: _*)
   }
 
-  def getMetricsAsDF(partitionCondition: String): DataFrame = {
-    import spark.implicits._
-    getTransactionMetrics(partitionCondition).toDF(metricColumns: _*)
+  /**
+   * The function returns operation metrics - count metric for either a provided partition condition
+   * or without one, provides the count metric for the entire Delta Table as a Seq[(Long, Long,
+   * Long, Long, Long)].
+   *
+   * @param partitionCondition
+   * @return
+   *   [[Seq]] of [[Tuple5]], where element is a [[Long]]
+   */
+  def getCountMetrics(
+      partitionCondition: Option[String] = None
+  ): Seq[(Long, Long, Long, Long, Long)] = {
+    val histories = partitionCondition match {
+      case None => deltaLog.history.getHistory(startingVersion, endingVersion)
+      case Some(condition) =>
+        deltaLog.history
+          .getHistory(startingVersion, endingVersion)
+          .filter(x => filterHistoryByPartition(x, condition))
+    }
+    transformMetric(generateMetric(histories, partitionCondition))
   }
 
-  def getTransactionMetrics: Seq[(Long, Long, Long, Long, Long)] = transformMetric(
-    generateMetric(deltaLog.history.getHistory(startingVersion, endingVersion))
-  )
-
-  def getTransactionMetrics(
-      partitionCondition: String
-  ): Seq[(Long, Long, Long, Long, Long)] = transformMetric(
-    generateMetric(
-      deltaLog.history
-        .getHistory(startingVersion, endingVersion)
-        .filter(x => filterHistoryByPartition(x, partitionCondition)),
-      Some(partitionCondition)
-    )
-  )
-
+  /**
+   * This function returns the records inserted count for WRITE/APPEND operation on a Delta Table
+   * partition for a version. It inspects the Delta Log aka Transaction Log to obtain this metric.
+   * @param partitionCondition
+   * @param version
+   * @return
+   *   [[Long]]
+   */
   def getWriteMetricByPartition(
       partitionCondition: String,
       version: Long
   ): Long = {
-    import spark.implicits._
-    val trimmed  = partitionCondition.trim
-    val splitCondition =
-      if (trimmed.contains(" and "))
-        trimmed.split(" and ").toSeq
-      else Seq(trimmed)
-    val conditions = splitCondition.map(x => {
-      val kv = x.split("=")
-      assert(kv.size == 2)
-      s"${kv.head.trim}=${kv.tail.head.trim.stripPrefix("\'").stripSuffix("\'")}"
-    })
+    val conditions = splitConditionTo(partitionCondition).map(x => s"${x._1}=${x._2}")
     val jsonSchema = new StructType()
       .add("numRecords", LongType)
       .add("minValues", MapType(StringType, StringType))
@@ -64,7 +82,7 @@ case class OperationMetricHelper(
       .add("nullCount", MapType(StringType, StringType))
     spark.read
       .json(FileNames.deltaFile(deltaLog.logPath, version).toString)
-      .withColumn("stats", org.apache.spark.sql.functions.from_json(col("add.stats"), jsonSchema))
+      .withColumn("stats", from_json(col("add.stats"), jsonSchema))
       .select("add.path", "stats")
       .map(x => {
         val path = x.getAs[String]("path")
@@ -79,48 +97,102 @@ case class OperationMetricHelper(
       .reduce(_ + _)
   }
 
-  def transformMetric(
+  /**
+   * Filter and maps the relevant operation for providing count metric: MERGE, WRITE, DELETE and
+   * UPDATE
+   *
+   * @param metric
+   * @return
+   */
+  private def transformMetric(
       metric: Seq[(Long, OperationMetrics)]
-  ): Seq[(Long, Long, Long, Long, Long)] = metric
-    .filter(x =>
-      x._2.isInstanceOf[MergeMetric] || x._2.isInstanceOf[WriteMetric] || x._2
-        .isInstanceOf[DeleteMetric]
+  ): Seq[(Long, Long, Long, Long, Long)] = metric.flatMap { case (version, opMetric) =>
+    opMetric match {
+      case MergeMetric(_, deleted, _, _, inserted, _, updated, _, _, sourceRows, _, _) =>
+        Seq((version, deleted, inserted, updated, sourceRows))
+      case WriteMetric(_, inserted, _) => Seq((version, 0L, inserted, 0L, inserted))
+      case DeleteMetric(deleted, _, _, _, _, _, _, _, _, _) =>
+        Seq((version, deleted, 0L, 0L, 0L))
+      case UpdateMetric(_, _, _, _, _, _, updated, _) => Seq((version, 0L, 0L, updated, 0L))
+      case _                                          => Seq.empty
+    }
+  }
+
+  /**
+   * Given a [[DeltaHistory]] and a partition condition string, this method returns whether the
+   * condition matches the partition condition applied to the operations like DELETE, UPDATE and
+   * MERGE.
+   * @param x
+   * @param y
+   * @return
+   */
+  def parseDeltaLogToValidatePartitionCondition(x: DeltaHistory, y: String): Boolean = {
+    val inputConditions: Map[String, String] = splitConditionTo(y.toLowerCase)
+    val opParamInDeltaLog: Map[String, String] = splitConditionTo(
+      // targets a delta log delete string that looks like ["(((country = 'USA') AND (gender = 'Female')) AND (id = 2))"]
+      x.operationParameters("predicate")
+        .toLowerCase
+        .replaceAll("[()]", " ")
+        .replaceAll("[\\[\\]]", " ")
+        .replaceAll("\\\"", " ")
     )
-    .map(x => {
-      val (deleted, inserted, updated, sourceRows) = x._2 match {
-        case MergeMetric(a, b, c, d, e, f, g, h, i, j, k, l) => (b, e, g, j)
-        case WriteMetric(a, b, c)                            => (0L, b, 0L, b)
-        case DeleteMetric(a, b, c, d, e, f, g, h, i, j)      => (a, 0L, 0L, 0L)
-        case _ =>
-          throw new IllegalArgumentException("Other Metric Types are not allowed in this method")
-      }
-      Tuple5.apply(x._1, deleted, inserted, updated, sourceRows)
-    })
+    inputConditions
+      .map(x => if (opParamInDeltaLog.contains(x._1)) opParamInDeltaLog(x._1) == x._2 else false)
+      .reduceOption(_ && _) match {
+      case None    => false
+      case Some(b) => b
+    }
+  }
+
+  /**
+   * Breaks down a string condition into [[Map]] of {[[String]],[[String]]} Handles the
+   * idiosyncrasies of Delta Log recorded predicate strings for operations like DELETE, UPDATE and
+   * MERGE
+   * @param partitionCondition
+   * @return
+   */
+  def splitConditionTo(partitionCondition: String): Map[String, String] = {
+    val trimmed = partitionCondition.trim
+    val splitCondition =
+      if (trimmed.contains(" and "))
+        trimmed.split(" and ").toSeq
+      else Seq(trimmed)
+    splitCondition
+      .map(x => {
+        val kv = x.split("=")
+        assert(kv.size == 2)
+        if (kv.head.contains("#")) {
+          // targets an update string that looks like (((country#590 = USA) AND (gender#588 = Female)) AND (id#587 = 4))
+          kv.head.split("#")(0).trim -> kv.tail.head.trim.stripPrefix("\'").stripSuffix("\'")
+        } else if (kv.head.contains("."))
+          // targets a merge string that looks like
+          // (((multi_partitioned_snapshot.id = source.id) AND (multi_partitioned_snapshot.country = 'IND')) AND
+          // (multi_partitioned_snapshot.gender = 'Male'))
+          kv.head.split("\\.")(1).trim -> kv.tail.head.trim.stripPrefix("\'").stripSuffix("\'")
+        else
+          kv.head.trim -> kv.tail.head.trim.stripPrefix("\'").stripSuffix("\'")
+      })
+      .toMap
+  }
 
   private def filterHistoryByPartition(x: DeltaHistory, partitionCondition: String): Boolean =
     x.operation match {
       case "WRITE" => true
-      case "DELETE" | "MERGE" =>
+      case "DELETE" | "MERGE" | "UPDATE" =>
         if (
           x.operationParameters
             .contains("predicate") && x.operationParameters.get("predicate") != None
         ) {
-          if (partitionCondition.trim.toLowerCase().contains(" and ")) {
-            val conditions = partitionCondition.split(" and ")
-            conditions.map(y => evaluateCondition(x, y)).reduce(_ && _)
-          } else evaluateCondition(x, partitionCondition)
+          parseDeltaLogToValidatePartitionCondition(x, partitionCondition)
         } else {
           false
         }
       case _ => false
     }
 
-  private def evaluateCondition(x: DeltaHistory, partitionCondition: String) = {
-    x.operationParameters.get("predicate").get.contains(partitionCondition.trim)
-  }
   private def generateMetric(
       deltaHistories: Seq[DeltaHistory],
-      partitionCondition: Option[String] = None
+      partitionCondition: Option[String]
   ): Seq[(Long, OperationMetrics)] =
     deltaHistories
       .map(dh => {
@@ -165,6 +237,17 @@ case class OperationMetricHelper(
                   numAddedBytes = whenContains(metrics, "numAddedBytes"),
                   executionTimeMs = whenContains(metrics, "executionTimeMs"),
                   scanTimeMs = whenContains(metrics, "scanTimeMs"),
+                  rewriteTimeMs = whenContains(metrics, "rewriteTimeMs")
+                )
+              case "UPDATE" =>
+                UpdateMetric(
+                  numRemovedFiles = whenContains(metrics, "numRemovedFiles"),
+                  numCopiedRows = whenContains(metrics, "numCopiedRows"),
+                  numAddedChangeFiles = whenContains(metrics, "numAddedChangeFiles"),
+                  executionTimeMs = whenContains(metrics, "executionTimeMs"),
+                  scanTimeMs = whenContains(metrics, "scanTimeMs"),
+                  numAddedFiles = whenContains(metrics, "numAddedFiles"),
+                  numUpdatedRows = whenContains(metrics, "numUpdatedRows"),
                   rewriteTimeMs = whenContains(metrics, "rewriteTimeMs")
                 )
               case _ => null

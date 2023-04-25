@@ -1,9 +1,9 @@
 package mrpowers.jodie
 
-import com.github.mrpowers.spark.fast.tests.DataFrameComparer
+import com.github.mrpowers.spark.fast.tests.{DataFrameComparer, DatasetContentMismatch}
 import io.delta.tables.DeltaTable
-import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions.desc
+import org.apache.spark.sql.{DataFrame, Row}
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.funspec.AnyFunSpec
 
@@ -23,7 +23,8 @@ class OperationMetricHelperSpec
     val updates = List((1, "Male", 35), (2, "Male", 100), (5, "Male", 101), (4, "Female", 18))
     val path    = (os.pwd / "tmp" / "delta-opm").toString()
     import spark.implicits._
-    val snapshotDF = rows.toDF("id", "gender", "age")
+    val snapshotDF            = rows.toDF("id", "gender", "age")
+    implicit val sparkSession = spark
     it("should return valid count metric") {
       val name = "snapshot"
       val deltaTable =
@@ -39,7 +40,7 @@ class OperationMetricHelperSpec
         .format("delta")
         .mode("append")
         .save(writePath)
-      val actualDF = OperationMetricHelper(writePath).getMetricsAsDF()
+      val actualDF = OperationMetricHelper(writePath).getCountMetricsAsDF()
       val expected = toVersionDF(
         Seq(
           (6L, 0L, 1L, 0L, 1L),
@@ -54,8 +55,8 @@ class OperationMetricHelperSpec
       assertSmallDataFrameEquality(actualDF, expected)
     }
     it("should return valid metric for single partition column") {
-      val deltaTable           = partitionWithMerge("partitioned_snapshot", rows, updates, path)
-      val actual               = OperationMetricHelper(writePath).getMetricsAsDF(" country = 'USA'")
+      val deltaTable = partitionWithMerge("partitioned_snapshot", rows, updates, path)
+      val actual = OperationMetricHelper(writePath).getCountMetricsAsDF(Some(" country = 'USA'"))
       val versions: Array[Row] = getCountryVersions(deltaTable)
       val expected =
         toVersionDF(
@@ -77,8 +78,8 @@ class OperationMetricHelperSpec
         .mode("append")
         .partitionBy("country")
         .save(writePath)
-      val condition            = " country = 'USA'"
-      val actual               = OperationMetricHelper(writePath).getMetricsAsDF(" country = 'USA'")
+      val condition = " country = 'USA'"
+      val actual    = OperationMetricHelper(writePath).getCountMetricsAsDF(Some(" country = 'USA'"))
       val versions: Array[Row] = getCountryVersions(deltaTable)
       val expected =
         toVersionDF(
@@ -91,6 +92,17 @@ class OperationMetricHelperSpec
           )
         )
       assertSmallDataFrameEquality(actual, expected)
+      // Query works without single quotes
+      val actualWithoutSingleQuote =
+        OperationMetricHelper(writePath).getCountMetricsAsDF(Some(" country = USA"))
+      assertSmallDataFrameEquality(actualWithoutSingleQuote, expected)
+      intercept[DatasetContentMismatch] {
+        // This query does not work because partition has country=USA and query passed is country=usa
+        // Query types that would work but return wrong count metric, more precisely 0L(zero) as count for write metric
+        val actualDoesNotMatchPartitionCase =
+          OperationMetricHelper(writePath).getCountMetricsAsDF(Some(" country = usa"))
+        assertSmallDataFrameEquality(actualDoesNotMatchPartitionCase, expected)
+      }
     }
     it("should return valid metric for multiple partition columns") {
       val deltaTable = multiplePartitionWithMerge("multi_partitioned_snapshot", rows, updates, path)
@@ -102,26 +114,75 @@ class OperationMetricHelperSpec
         .mode("append")
         .partitionBy("country", "gender")
         .save(writePath)
-      val actual = OperationMetricHelper(writePath).getMetricsAsDF(
-        " country = 'USA' and gender = 'Female'"
+      val actual = OperationMetricHelper(writePath).getCountMetricsAsDF(
+        Some(" country = 'USA' and gender = 'Female'")
       )
-      val versionDF = deltaTable
-        .history()
-        .filter(" version > 0 and version < 5")
-        .select("version", "operationParameters.predicate")
-        .filter("predicate like '%USA%' and predicate like '%Female%'")
-      assert(versionDF.count() == 1)
+      val version = getMergeVersionForPartition(deltaTable)
       val expected =
         toVersionDF(
           Seq(
             (6L, 0L, 1L, 0L, 1L),
             (5L, 1L, 0L, 0L, 0L),
-            (versionDF.take(1).head.getAs[Long]("version"), 0L, 1L, 0L, 1L),
+            (version, 0L, 1L, 0L, 1L),
+            (0L, 0L, 1L, 0L, 1L)
+          )
+        )
+      assertSmallDataFrameEquality(actual, expected)
+      val actualWithoutSingleQuote = OperationMetricHelper(writePath).getCountMetricsAsDF(
+        Some(" country = USA and gender = Female")
+      )
+      assertSmallDataFrameEquality(actualWithoutSingleQuote, expected)
+      intercept[DatasetContentMismatch] {
+        val actualDoesNotMatchPartitionCase = OperationMetricHelper(writePath).getCountMetricsAsDF(
+          Some(" country = usa and gender = female ")
+        )
+        assertSmallDataFrameEquality(actualDoesNotMatchPartitionCase, expected)
+      }
+    }
+    it("should return valid metric for multiple partition columns containing updates") {
+      val deltaTable =
+        multiplePartitionWithMerge("multi_partitioned_snapshot_updated", rows, updates, path)
+      deltaTable.delete("country == 'USA' and gender = 'Female' and id == 2")
+      Seq((10, "Female", 35, "USA"))
+        .toDF("id", "gender", "age", "country")
+        .write
+        .format("delta")
+        .mode("append")
+        .partitionBy("country", "gender")
+        .save(writePath)
+      spark.sql(s"ALTER TABLE default.multi_partitioned_snapshot_updated SET TBLPROPERTIES (delta.enableChangeDataFeed = true)")
+
+      deltaTable.updateExpr(
+        "country == 'USA' and gender = 'Female' and id == 4",
+        Map("age" -> "533")
+      )
+      deltaTable.optimize().where("country='USA' and gender='Female'").executeCompaction()
+      val actual = OperationMetricHelper(writePath).getCountMetricsAsDF(
+        Some(" country = 'USA' and gender = 'Female'")
+      )
+      val version = getMergeVersionForPartition(deltaTable)
+      val expected =
+        toVersionDF(
+          Seq(
+            (8L, 0L, 0L, 1L, 0L),
+            (6L, 0L, 1L, 0L, 1L),
+            (5L, 1L, 0L, 0L, 0L),
+            (version, 0L, 1L, 0L, 1L),
             (0L, 0L, 1L, 0L, 1L)
           )
         )
       assertSmallDataFrameEquality(actual, expected)
     }
+  }
+
+  private def getMergeVersionForPartition(deltaTable: DeltaTable): Long = {
+    val versionDF = deltaTable
+      .history()
+      .filter(" version > 0 and version < 5")
+      .select("version", "operationParameters.predicate")
+      .filter("predicate like '%USA%' and predicate like '%Female%'")
+    assert(versionDF.count() == 1)
+    versionDF.take(1).head.getAs[Long]("version")
   }
 
   private def getCountryVersions(deltaTable: DeltaTable) = {
