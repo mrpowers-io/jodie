@@ -481,6 +481,73 @@ ChangeDataFeedHelper(writePath, 9, 13).dryRun().readCDF
 ```
 If no error found, it will return a similar Spark Dataframe with CDF between given versions. 
 
+## Operation Metric Helpers
+
+### Count Metrics on Delta Table between 2 versions
+This function displays all count metric stored in the Delta Logs across versions for the entire Delta Table. It skips versions which do not record 
+these count metrics and presents a unified view. It shows the growth of a Delta Table by providing the record counts - 
+**deleted**, **updated** and **inserted** against a **version**. For a **merge** operation, we additionally have a source dataframe to tally
+with as **source rows = (deleted + updated + inserted) rows**.  Please note that you need to have enough Driver Memory
+for processing the Delta Logs at driver level.
+```scala
+OperationMetricHelper(path,0,6).getCountMetricsAsDF()
+```
+The result will be following:
+```scala
++-------+-------+--------+-------+-----------+
+|version|deleted|inserted|updated|source_rows|
++-------+-------+--------+-------+-----------+
+|6      |0      |108     |0      |108        |
+|5      |12     |0       |0      |0          |
+|4      |0      |0       |300    |300        |
+|3      |0      |100     |0      |100        |
+|2      |0      |150     |190    |340        |
+|1      |0      |0       |200    |200        |
+|0      |0      |400     |0      |400        |
++-------+-------+--------+-------+-----------+
+```
+### Count Metrics at partition level of Delta Table
+This function provides the same count metrics as the above function, but this time at a partition level. If operations 
+like **MERGE, DELETE** and **UPDATE** are executed **at a partition level**, then this function can help in visualizing count 
+metrics for such a partition. However, **it will not provide correct count metrics if these operations are performed 
+across partitions**. This is because Delta Log does not store this information at a log level and hence, need to be 
+implemented separately (we intend to take this up in future). Please note that you need to have enough Driver Memory
+for processing the Delta Logs at driver level.
+```scala
+OperationMetricHelper(path).getCountMetricsAsDF(
+  Some(" country = 'USA' and gender = 'Female'"))
+
+// The same metric can be obtained generally without using spark dataframe
+def getCountMetrics(partitionCondition: Option[String] = None)
+                    : Seq[(Long, Long, Long, Long, Long)]
+```
+The result will be following:
+```scala
++-------+-------+--------+--------+-----------+
+|version|deleted|inserted| updated|source_rows|
++-------+-------+--------+--------+-----------+
+|     27|      0|       0|20635530|   20635524|
+|     14|      0|       0| 1429460|    1429460|
+|     13|      0|       0| 4670450|    4670450|
+|     12|      0|       0|20635530|   20635524|
+|     11|      0|       0| 5181821|    5181821|
+|     10|      0|       0| 1562046|    1562046|
+|      9|      0|       0| 1562046|    1562046|
+|      6|      0|       0|20635518|   20635512|
+|      3|      0|       0| 5181821|    5181821|
+|      0|      0|56287990|       0|   56287990|
++-------+-------+--------+--------+-----------+
+```
+Supported Partition condition types
+```scala
+// Single Partition
+Some(" country = 'USA'")
+// Multiple Partition with AND condition. OR is not supported.
+Some(" country = 'USA' and gender = 'Female'")
+// Without Single Quotes
+Some(" country = USA and gender = Female")
+```
+
 ## How to contribute
 We welcome contributions to this project, to contribute checkout our [CONTRIBUTING.md](CONTRIBUTING.md) file.
 
