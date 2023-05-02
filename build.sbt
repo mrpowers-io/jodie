@@ -1,7 +1,7 @@
 name := "jodie"
 organization := "com.github.mrpowers"
 
-version := "0.1.0"
+version := "0.2.0"
 
 crossScalaVersions := Seq("2.12.17", "2.13.10")
 
