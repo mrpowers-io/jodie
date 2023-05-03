@@ -1,9 +1,11 @@
 package mrpowers.jodie
 
-import org.apache.spark.sql.{DataFrame, Row, SaveMode, SparkSession}
 import io.delta.tables._
+import mrpowers.jodie.delta.DeltaConstants.{numRecordsColumn, numRecordsDFColumns, sizeColumn, sizeDFColumns, statsPartitionColumn}
+import org.apache.spark.sql.delta.DeltaLog
 import org.apache.spark.sql.expressions.Window.partitionBy
-import org.apache.spark.sql.functions.{col, concat_ws, count, md5, row_number}
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.{DataFrame, Row, SaveMode, SparkSession}
 
 import scala.collection.mutable
 
@@ -12,13 +14,35 @@ object DeltaHelpers {
   /**
    * Gets the latest version of a Delta lake
    */
-  def latestVersion(path: String): Long = {
-    DeltaTable
-      .forPath(SparkSession.active, path)
-      .history(1)
-      .select("version")
-      .head()(0)
-      .asInstanceOf[Long]
+  def latestVersion(path: String): Long = DeltaLog.forTable(SparkSession.active, path).snapshot.version
+
+  def deltaPartitionWiseFileSizeDistribution(path: String): DataFrame = deltaFileStats(path)
+    .groupBy(sort_array(map_entries(col(statsPartitionColumn))))
+    .agg(count(sizeColumn),
+      mean(sizeColumn),
+      stddev(sizeColumn),
+      min(sizeColumn),
+      max(sizeColumn)).toDF(sizeDFColumns: _*)
+
+  def deltaPartitionWiseNumRecordsDistribution(path: String): DataFrame = deltaFileStats(path)
+    .groupBy(map_entries(col(statsPartitionColumn)))
+    .agg(count(numRecordsColumn), mean(numRecordsColumn),
+      stddev(numRecordsColumn), min(numRecordsColumn), max(numRecordsColumn))
+    .toDF(numRecordsDFColumns: _*)
+
+  def deltaFileSizesDistribution(path: String, condition: Option[String] = None): DataFrame =
+    deltaFileStats(path, condition).describe(sizeColumn).toDF(sizeDFColumns: _*)
+
+  def deltaNumRecordsDistribution(path: String, condition: Option[String] = None): DataFrame =
+    deltaFileStats(path, condition).describe(numRecordsColumn).toDF(numRecordsDFColumns: _*)
+
+  def deltaFileStats(path: String, condition: Option[String] = None): DataFrame = {
+    val tableLog = DeltaLog.forTable(SparkSession.active, path)
+    val snapshot = tableLog.snapshot
+    condition match {
+      case None => snapshot.filesWithStatsForScan(Nil)
+      case Some(value) => snapshot.filesWithStatsForScan(Seq(expr(value).expr))
+    }
   }
 
   def deltaFileSizes(deltaTable: DeltaTable) = {
