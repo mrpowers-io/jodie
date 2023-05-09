@@ -33,7 +33,7 @@ object DeltaHelpers {
 
   def getAllPartitionStats(path: String, groupByCol: String, aggCol: String) = {
     deltaFileStats(path)
-      //.withColumn("norm",when(col(aggCol).equalTo(sizeColumn), col(aggCol).divide(1024*1024)).otherwise(col(aggCol)))
+      .withColumn("norm",when(col(aggCol).equalTo(sizeColumn), col(aggCol).divide(1024*1024)).otherwise(col(aggCol)))
       .groupBy(map_entries(col(groupByCol)))
       .agg(
         count(aggCol),
