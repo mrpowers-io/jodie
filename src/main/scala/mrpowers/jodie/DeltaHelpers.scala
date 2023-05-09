@@ -1,7 +1,7 @@
 package mrpowers.jodie
 
 import io.delta.tables._
-import mrpowers.jodie.delta.DeltaConstants.{numRecordsColumn, numRecordsDFColumns, sizeColumn, sizeDFColumns, statsPartitionColumn}
+import mrpowers.jodie.delta.DeltaConstants._
 import org.apache.spark.sql.delta.DeltaLog
 import org.apache.spark.sql.expressions.Window.partitionBy
 import org.apache.spark.sql.functions._
@@ -14,33 +14,46 @@ object DeltaHelpers {
   /**
    * Gets the latest version of a Delta lake
    */
-  def latestVersion(path: String): Long = DeltaLog.forTable(SparkSession.active, path).snapshot.version
-
-  def deltaPartitionWiseFileSizeDistribution(path: String): DataFrame = deltaFileStats(path)
-    .groupBy(sort_array(map_entries(col(statsPartitionColumn))))
-    .agg(count(sizeColumn),
-      mean(sizeColumn),
-      stddev(sizeColumn),
-      min(sizeColumn),
-      max(sizeColumn)).toDF(sizeDFColumns: _*)
-
-  def deltaPartitionWiseNumRecordsDistribution(path: String): DataFrame = deltaFileStats(path)
-    .groupBy(map_entries(col(statsPartitionColumn)))
-    .agg(count(numRecordsColumn), mean(numRecordsColumn),
-      stddev(numRecordsColumn), min(numRecordsColumn), max(numRecordsColumn))
-    .toDF(numRecordsDFColumns: _*)
+  def latestVersion(path: String): Long =
+    DeltaLog.forTable(SparkSession.active, path).snapshot.version
 
   def deltaFileSizesDistribution(path: String, condition: Option[String] = None): DataFrame =
-    deltaFileStats(path, condition).describe(sizeColumn).toDF(sizeDFColumns: _*)
+    deltaFileStats(path, condition).select(sizeColumn).summary().toDF(sizeDFColumns: _*)
 
   def deltaNumRecordsDistribution(path: String, condition: Option[String] = None): DataFrame =
-    deltaFileStats(path, condition).describe(numRecordsColumn).toDF(numRecordsDFColumns: _*)
+    deltaFileStats(path, condition).select(numRecordsColumn).summary().toDF(numRecordsDFColumns: _*)
+
+  def deltaPartitionWiseFileSizeDistribution(path: String): DataFrame =
+    getAllPartitionStats(path, statsPartitionColumn, sizeColumn)
+      .toDF(sizeDFColumns: _*)
+
+  def deltaPartitionWiseNumRecordsDistribution(path: String): DataFrame =
+    getAllPartitionStats(path, statsPartitionColumn, numRecordsColumn)
+      .toDF(numRecordsDFColumns: _*)
+
+  def getAllPartitionStats(path: String, groupByCol: String, aggCol: String) = {
+    deltaFileStats(path)
+      //.withColumn("norm",when(col(aggCol).equalTo(sizeColumn), col(aggCol).divide(1024*1024)).otherwise(col(aggCol)))
+      .groupBy(map_entries(col(groupByCol)))
+      .agg(
+        count(aggCol),
+        mean(aggCol),
+        stddev(aggCol),
+        min(aggCol),
+        max(aggCol),
+        percentile_approx(
+          col(aggCol),
+          lit(Array(0.1, 0.25, 0.50, 0.75, 0.90, 0.95)),
+          lit(2147483647)
+        )
+      )
+  }
 
   def deltaFileStats(path: String, condition: Option[String] = None): DataFrame = {
     val tableLog = DeltaLog.forTable(SparkSession.active, path)
     val snapshot = tableLog.snapshot
     condition match {
-      case None => snapshot.filesWithStatsForScan(Nil)
+      case None        => snapshot.filesWithStatsForScan(Nil)
       case Some(value) => snapshot.filesWithStatsForScan(Seq(expr(value).expr))
     }
   }
@@ -50,7 +63,11 @@ object DeltaHelpers {
     val (sizeInBytes, numberOfFiles) =
       (details.getAs[Long]("sizeInBytes"), details.getAs[Long]("numFiles"))
     val avgFileSizeInBytes = if (numberOfFiles == 0) 0 else Math.round(sizeInBytes / numberOfFiles)
-    Map("size_in_bytes" -> sizeInBytes, "number_of_files" -> numberOfFiles, "average_file_size_in_bytes" -> avgFileSizeInBytes)
+    Map(
+      "size_in_bytes"              -> sizeInBytes,
+      "number_of_files"            -> numberOfFiles,
+      "average_file_size_in_bytes" -> avgFileSizeInBytes
+    )
   }
 
   /**
@@ -107,6 +124,7 @@ object DeltaHelpers {
       primaryKey: String,
       duplicateColumns: Seq[String]
   ): Unit = {
+    deltaTable.optimize().where("date='2021-11-18'").executeZOrderBy()
     val df = deltaTable.toDF
     // 1 Validate primaryKey is not empty
     if (primaryKey.isEmpty)
@@ -226,7 +244,7 @@ object DeltaHelpers {
     if (compositeKey.isEmpty)
       throw new NoSuchElementException("The attribute compositeKey must not be empty")
 
-    val mergeCondition = compositeKey.map(c => s"old.$c = new.$c").mkString(" AND ")
+    val mergeCondition    = compositeKey.map(c => s"old.$c = new.$c").mkString(" AND ")
     val appendDataCleaned = appendData.dropDuplicates(compositeKey)
     deltaTable
       .alias("old")
@@ -261,17 +279,17 @@ object DeltaHelpers {
   }
 
   def withMD5Columns(
-                      dataFrame: DataFrame,
-                      cols: List[String],
-                      newColName: String = ""
-                    ): DataFrame = {
+      dataFrame: DataFrame,
+      cols: List[String],
+      newColName: String = ""
+  ): DataFrame = {
     val outputCol = if (newColName.isEmpty) cols.mkString("_md5", "", "") else newColName
     dataFrame.withColumn(outputCol, md5(concat_ws("||", cols.map(c => col(c)): _*)))
   }
 
   def withMD5Columns(
-                      deltaTable: DeltaTable,
-                      cols: List[String],
-                      newColName: String
-                    ): DataFrame = withMD5Columns(deltaTable.toDF, cols, newColName)
+      deltaTable: DeltaTable,
+      cols: List[String],
+      newColName: String
+  ): DataFrame = withMD5Columns(deltaTable.toDF, cols, newColName)
 }
