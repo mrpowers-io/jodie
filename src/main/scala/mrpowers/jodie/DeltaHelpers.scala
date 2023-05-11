@@ -17,43 +17,34 @@ object DeltaHelpers {
   def latestVersion(path: String): Long =
     DeltaLog.forTable(SparkSession.active, path).snapshot.version
 
-  def deltaFileSizesDistribution(path: String, condition: Option[String] = None): DataFrame =
-    deltaFileStats(path, condition).select(sizeColumn).summary().toDF(sizeDFColumns: _*)
+  def deltaFileSizeDistribution(path: String, condition: Option[String] = None): DataFrame =
+    getAllPartitionStats(deltaFileStats(path, condition), statsPartitionColumn, sizeColumn).toDF(sizeDFColumns: _*)
 
-  def deltaNumRecordsDistribution(path: String, condition: Option[String] = None): DataFrame =
-    deltaFileStats(path, condition).select(numRecordsColumn).summary().toDF(numRecordsDFColumns: _*)
+  def deltaNumRecordDistribution(path: String, condition: Option[String] = None): DataFrame =
+    getAllPartitionStats(deltaFileStats(path, condition), statsPartitionColumn, numRecordsColumn).toDF(numRecordsDFColumns: _*)
 
-  def deltaPartitionWiseFileSizeDistribution(path: String): DataFrame =
-    getAllPartitionStats(path, statsPartitionColumn, sizeColumn)
-      .toDF(sizeDFColumns: _*)
 
-  def deltaPartitionWiseNumRecordsDistribution(path: String): DataFrame =
-    getAllPartitionStats(path, statsPartitionColumn, numRecordsColumn)
-      .toDF(numRecordsDFColumns: _*)
-
-  def getAllPartitionStats(path: String, groupByCol: String, aggCol: String) = {
-    deltaFileStats(path)
-      .withColumn("norm",when(col(aggCol).equalTo(sizeColumn), col(aggCol).divide(1024*1024)).otherwise(col(aggCol)))
-      .groupBy(map_entries(col(groupByCol)))
-      .agg(
-        count(aggCol),
-        mean(aggCol),
-        stddev(aggCol),
-        min(aggCol),
-        max(aggCol),
-        percentile_approx(
-          col(aggCol),
-          lit(Array(0.1, 0.25, 0.50, 0.75, 0.90, 0.95)),
-          lit(2147483647)
-        )
+  def getAllPartitionStats(filteredDF: DataFrame, groupByCol: String, aggCol: String) = filteredDF
+    //.withColumn("norm",when(col(aggCol).equalTo(sizeColumn), col(aggCol).divide(1024*1024)).otherwise(col(aggCol)))
+    .groupBy(map_entries(col(groupByCol)))
+    .agg(
+      count(aggCol),
+      mean(aggCol),
+      stddev(aggCol),
+      min(aggCol),
+      max(aggCol),
+      percentile_approx(
+        col(aggCol),
+        lit(Array(0.1, 0.25, 0.50, 0.75, 0.90, 0.95)),
+        lit(2147483647)
       )
-  }
+    )
 
   def deltaFileStats(path: String, condition: Option[String] = None): DataFrame = {
     val tableLog = DeltaLog.forTable(SparkSession.active, path)
     val snapshot = tableLog.snapshot
     condition match {
-      case None        => snapshot.filesWithStatsForScan(Nil)
+      case None => snapshot.filesWithStatsForScan(Nil)
       case Some(value) => snapshot.filesWithStatsForScan(Seq(expr(value).expr))
     }
   }
@@ -124,7 +115,6 @@ object DeltaHelpers {
       primaryKey: String,
       duplicateColumns: Seq[String]
   ): Unit = {
-    deltaTable.optimize().where("date='2021-11-18'").executeZOrderBy()
     val df = deltaTable.toDF
     // 1 Validate primaryKey is not empty
     if (primaryKey.isEmpty)
