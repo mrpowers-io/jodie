@@ -688,7 +688,7 @@ class DeltaHelperSpec
     it("should return valid file sizes in megabytes"){
       val path = (os.pwd / "tmp" / "delta-table-multi-files").toString()
       def getDF(partition:String) = {
-        (1 to 1000000).toDF("id")
+        (1 to 10000).toDF("id")
           .collect()
           .map(_.getInt(0))
           .map(id => (id, partition, id + 10))
@@ -698,7 +698,7 @@ class DeltaHelperSpec
         .toDF("id", "animal", "age").write.mode("overwrite")
         .format("delta").partitionBy("animal").save(path)
       val fileSizeDF = DeltaHelpers.deltaFileSizeDistributionInMB(path)
-      val size = 7.6368255615234375
+      val size = 0.07698249816894531
       fileSizeDF.count() should equal(3)
       assertDistributionCount(fileSizeDF, (1, 1l, size, null, size, size, Array(size, size, size, size, size, size)))
     }

@@ -635,6 +635,7 @@ To generate artifacts, run
 
 * Matthew Powers aka [MrPowers](https://github.com/MrPowers)
 * Brayan Jules aka [brayanjuls](https://github.com/brayanjuls)
+* Joydeep Banik Roy aka [joydeepbroy-zeotap](https://github.com/joydeepbroy-zeotap)
 
 ## More about Jodie
 
