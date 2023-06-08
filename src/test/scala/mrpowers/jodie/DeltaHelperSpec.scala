@@ -684,9 +684,27 @@ class DeltaHelperSpec
       numRecordsDF.count() should equal(1l)
       assertDistributionCount(numRecordsDF, (2, 1l, 2.0, null, 2, 2, Array(2, 2, 2, 2, 2, 2)))
     }
+
+    it("should return valid file sizes in megabytes"){
+      val path = (os.pwd / "tmp" / "delta-table-multi-files").toString()
+      def getDF(partition:String) = {
+        (1 to 1000000).toDF("id")
+          .collect()
+          .map(_.getInt(0))
+          .map(id => (id, partition, id + 10))
+          .toSeq
+      }
+      (getDF("dog") ++ getDF("cat") ++ getDF("bird"))
+        .toDF("id", "animal", "age").write.mode("overwrite")
+        .format("delta").partitionBy("animal").save(path)
+      val fileSizeDF = DeltaHelpers.deltaFileSizeDistributionInMB(path)
+      val size = 7.6368255615234375
+      fileSizeDF.count() should equal(3)
+      assertDistributionCount(fileSizeDF, (1, 1l, size, null, size, size, Array(size, size, size, size, size, size)))
+    }
   }
 
-  private def assertDistributionCount(df: DataFrame, expected: (Int, Long, Double, Any, Long, Long, Array[Double])) = {
+  private def assertDistributionCount(df: DataFrame, expected: (Int, Long, Double, Any, Any, Any, Array[Double])) = {
     val actual = df.take(1)(0)
     actual.getAs[mutable.WrappedArray[(String, String)]](0).length should equal(expected._1)
     actual.getAs[Long](1) should equal(expected._2)
