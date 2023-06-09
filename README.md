@@ -376,6 +376,68 @@ Map("size_in_bytes" -> 1320,
   "average_file_size_in_bytes" -> 660)
 ```
 
+## Delta Table File Size Distribution
+The function `deltaFileSizeDistributionInMB` returns a `DataFrame` that contains the following stats in megabytes about file sizes in a Delta Table:
+### `No. of Parquet Files, Mean File Size, Standard Deviation, Minimum File Size, Maximum File Size, 10th Percentile, 25th Percentile, Median, 75th Percentile, 90th Percentile, 95th Percentile.`
+
+This function also works on partition condition. For example, if you have a Delta Table partitioned by `country` and you want to know the file size distribution for `country = 'Australia''`, you can run the following:
+```scala
+DeltaHelpers.deltaFileSizeDistribution(path, Some("country='Australia'"))
+```
+This will return a `DataFrame` with the following columns:
+```scala
++------------------------------------------------+--------------------+------------------+--------------------+--------------------+------------------+-----------------------------------------------------------------------------------------------------------------------+
+|partitionValues                                 |num_of_parquet_files|mean_size_of_files|stddev              |min_file_size       |max_file_size     |Percentile[10th, 25th, Median, 75th, 90th, 95th]                                                                       |
++------------------------------------------------+--------------------+------------------+--------------------+--------------------+------------------+-----------------------------------------------------------------------------------------------------------------------+
+|[{country, Australia}]                          |1429                |30.205616120778238|0.3454942220373272  |17.376179695129395  |30.377344131469727|[30.132079124450684, 30.173019409179688, 30.215540885925293, 30.25797176361084, 30.294878005981445, 30.318415641784668]|
++------------------------------------------------+--------------------+------------------+--------------------+--------------------+------------------+-----------------------------------------------------------------------------------------------------------------------+
+```
+Generally, if no partition condition is provided, the function will return the `file size distribution` for the whole Delta Table (with or without partition wise).
+```scala
+DeltaHelpers.deltaFileSizeDistribution(path)
+
++------------------------------------------------+--------------------+------------------+--------------------+--------------------+------------------+-----------------------------------------------------------------------------------------------------------------------+
+|partitionValues                                 |num_of_parquet_files|mean_size_of_files|stddev              |min_file_size       |max_file_size     |Percentile[10th, 25th, Median, 75th, 90th, 95th]                                                                       |
++------------------------------------------------+--------------------+------------------+--------------------+--------------------+------------------+-----------------------------------------------------------------------------------------------------------------------+
+|[{country, Mauritius}]                          |2502                |28.14731636093103 |0.7981461034111957  |0.005436897277832031|28.37139320373535 |[28.098042488098145, 28.12824249267578, 28.167524337768555, 28.207666397094727, 28.246790885925293, 28.265881538391113]|
+|[{country, Malaysia}]                           |3334                |34.471798611888644|0.4018671378261647  |11.515838623046875  |34.700727462768555|[34.40602779388428, 34.43935298919678, 34.47779560089111, 34.51614856719971, 34.55129528045654, 34.57488822937012]     |
+|[{country, GrandDuchyofLuxembourg}]             |808                 |2.84647535569597  |0.5369371124495063  |0.006397247314453125|3.0397253036499023|[2.8616743087768555, 2.8840208053588867, 2.9723005294799805, 2.992110252380371, 3.0045957565307617, 3.0115060806274414]|
+|[{country, Argentina}]                          |3372                |36.82978148392511 |5.336511210904255   |0.010506629943847656|99.95287132263184 |[36.29576301574707, 36.33060932159424, 36.369083404541016, 36.406826972961426, 36.442559242248535, 36.4655065536499]   |
+|[{country, Australia}]                          |1429                |30.205616120778238|0.3454942220373272  |17.376179695129395  |30.377344131469727|[30.132079124450684, 30.173019409179688, 30.215540885925293, 30.25797176361084, 30.294878005981445, 30.318415641784668]|
++------------------------------------------------+--------------------+------------------+--------------------+--------------------+------------------+-----------------------------------------------------------------------------------------------------------------------+
+```
+A similar function `deltaFileSizeDistribution` is provided which returns the same stats in bytes.
+## Delta Table Number of Records Distribution
+The function `deltaNumRecordDistribution` returns a `DataFrame` that contains the following stats about number of records in parquet files in a Delta Table:
+### `No. of Parquet Files, Mean Num Records, Standard Deviation, Minimum & Maximum Number of Records in a File, 10th Percentile, 25th Percentile, Median, 75th Percentile, 90th Percentile, 95th Percentile.`
+
+This function also works on partition condition. For example, if you have a Delta Table partitioned by `country` and you want to know the numRecords distribution for `country = 'Australia''`, you can run the following:
+```scala
+DeltaHelpers.deltaNumRecordDistribution(path, Some("country='Australia'"))
+```
+This will return a `DataFrame` with the following columns:
+```scala
++------------------------------------------------+--------------------+------------------+--------------------+--------------------+------------------+---------------------------------------------------------+
+|partitionValues                                 |num_of_parquet_files|mean_num_records_in_files|stddev            |min_num_records|max_num_records|Percentile[10th, 25th, Median, 75th, 90th, 95th]            |
++------------------------------------------------+--------------------+-------------------------+------------------+---------------+---------------+------------------------------------------------------------+
+|[{country, Australia}]                          |1429                |354160.2757172848        |4075.503669047513 |201823.0       |355980.0       |[353490.0, 353907.0, 354262.0, 354661.0, 355024.0, 355246.0]|
++------------------------------------------------+--------------------+------------------+--------------------+--------------------+------------------+---------------------------------------------------------+
+```
+Generally, if no partition condition is provided, the function will return the `number of records distribution` for the whole Delta Table (with or without partition wise).
+```scala
+DeltaHelpers.deltaNumRecordDistribution(path)
+
++------------------------------------------------+--------------------+------------------+--------------------+--------------------+------------------+---------------------------------------------------------+
+|partitionValues                                 |num_of_parquet_files|mean_num_records_in_files|stddev            |min_num_records|max_num_records|Percentile[10th, 25th, Median, 75th, 90th, 95th]            |
++------------------------------------------------+--------------------+-------------------------+------------------+---------------+---------------+------------------------------------------------------------+
+|[{country, Mauritius}]                          |2502                |433464.051558753         |12279.532110752265|1.0            |436195.0       |[432963.0, 433373.0, 433811.0, 434265.0, 434633.0, 434853.0]|
+|[{country, Malaysia}]                           |3334                |411151.4946010798        |4797.137407595447 |136777.0       |413581.0       |[410390.0, 410794.0, 411234.0, 411674.0, 412063.0, 412309.0]|
+|[{country, GrandDuchyofLuxembourg}]             |808                 |26462.003712871287       |5003.8118076056935|6.0            |28256.0        |[26605.0, 26811.0, 27635.0, 27822.0, 27937.0, 28002.0]      |
+|[{country, Argentina}]                          |3372                |461765.5604982206        |79874.3727926887  |61.0           |1403964.0      |[453782.0, 454174.0, 454646.0, 455103.0, 455543.0, 455818.0]|
+|[{country, Australia}]                          |1429                |354160.2757172848        |4075.503669047513 |201823.0       |355980.0       |[353490.0, 353907.0, 354262.0, 354661.0, 355024.0, 355246.0]|
++------------------------------------------------+--------------------+------------------+--------------------+--------------------+------------------+---------------------------------------------------------+
+```
+
 ## Change Data Feed Helpers
 
 ### CASE I - When Delta aka Transaction Log gets purged
@@ -573,6 +635,7 @@ To generate artifacts, run
 
 * Matthew Powers aka [MrPowers](https://github.com/MrPowers)
 * Brayan Jules aka [brayanjuls](https://github.com/brayanjuls)
+* Joydeep Banik Roy aka [joydeepbroy-zeotap](https://github.com/joydeepbroy-zeotap)
 
 ## More about Jodie
 
