@@ -110,7 +110,7 @@ The result of running the previous function is the following table:
 |  id|firstname| lastname|
 +----+---------+---------+
 |   2|    Maria|   Willis|
-|   2|    Maria|     Pitt| 
+|   6|    Maria|     Pitt| 
 +----+---------+---------+
 ```
 
