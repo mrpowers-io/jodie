@@ -438,6 +438,9 @@ DeltaHelpers.deltaNumRecordDistribution(path)
 +------------------------------------------------+--------------------+------------------+--------------------+--------------------+------------------+---------------------------------------------------------+
 ```
 
+## Number of Shuffle Files in Merge & Other Filter Conditions
+The function `getNum`
+
 ## Change Data Feed Helpers
 
 ### CASE I - When Delta aka Transaction Log gets purged

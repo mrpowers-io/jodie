@@ -27,10 +27,10 @@ class DeltaHelperSpec
   describe("When Delta table is queried for file sizes") {
     it("should provide delta file sizes successfully") {
       val path = (os.pwd / "tmp" / "delta-table").toString()
-      createBaseDeltaTable(path)
+      createBaseDeltaTable(path, rows)
 
       val deltaTable = DeltaTable.forPath(path)
-      val actual = DeltaHelpers.deltaFileSizes(deltaTable)
+      val actual     = DeltaHelpers.deltaFileSizes(deltaTable)
 
       actual("size_in_bytes") should equal(1088L)
       actual("number_of_files") should equal(1L)
@@ -38,7 +38,8 @@ class DeltaHelperSpec
     }
 
     it("should not fail if the table is empty") {
-      val emptyDeltaTable = DeltaTable.create(spark)
+      val emptyDeltaTable = DeltaTable
+        .create(spark)
         .tableName("delta_empty_table")
         .addColumn("id", dataType = "INT")
         .addColumn("firstname", dataType = "STRING")
@@ -53,7 +54,7 @@ class DeltaHelperSpec
   describe("remove duplicate records from delta table") {
     it("should remove duplicates successful") {
       val path = (os.pwd / "tmp" / "delta-duplicate").toString()
-      createBaseDeltaTable(path)
+      createBaseDeltaTable(path, rows)
 
       val deltaTable       = DeltaTable.forPath(path)
       val duplicateColumns = Seq("firstname", "lastname")
@@ -150,7 +151,7 @@ class DeltaHelperSpec
   describe("remove duplicate records from delta table using primary key") {
     it("should remove duplicates given a primary key and duplicate columns") {
       val path = (os.pwd / "tmp" / "delta-duplicate-pk").toString()
-      createBaseDeltaTable(path)
+      createBaseDeltaTable(path, rows)
 
       val deltaTable       = DeltaTable.forPath(path)
       val duplicateColumns = Seq("lastname")
@@ -173,7 +174,7 @@ class DeltaHelperSpec
 
     it("should fail to remove duplicates when not duplicate columns is provided") {
       val path = (os.pwd / "tmp" / "delta-pk-not-duplicate-columns").toString()
-      createBaseDeltaTable(path)
+      createBaseDeltaTable(path, rows)
 
       val deltaTable = DeltaTable.forPath(path)
       val primaryKey = "id"
@@ -220,7 +221,7 @@ class DeltaHelperSpec
 
     it("should fail to remove duplicate when not primary key is provided") {
       val path = (os.pwd / "tmp" / "delta-duplicate-no-pk").toString()
-      createBaseDeltaTable(path)
+      createBaseDeltaTable(path, rows)
 
       val deltaTable = DeltaTable.forPath(path)
       val primaryKey = ""
@@ -233,7 +234,7 @@ class DeltaHelperSpec
 
     it("should fail to remove duplicate when duplicateColumns does not exist in table") {
       val path = (os.pwd / "tmp" / "delta-duplicate-cols-no-exists").toString()
-      createBaseDeltaTable(path)
+      createBaseDeltaTable(path, rows)
 
       val deltaTable       = DeltaTable.forPath(path)
       val primaryKey       = "id"
@@ -379,7 +380,7 @@ class DeltaHelperSpec
     it("should create a new delta table from an existing one using path") {
       val path = (os.pwd / "tmp" / "delta-copy-from-existing-path").toString()
 
-      val df = createBaseDeltaTableWithPartitions(path, Seq("lastname", "firstname"))
+      val df = createBaseDeltaTableWithPartitions(path, Seq("lastname", "firstname"), partRows)
       val deltaTable = DeltaTable.forPath(path)
       val targetPath = (os.pwd / "tmp" / "delta-copy-from-existing-target-path").toString()
       DeltaHelpers.copyTable(deltaTable, targetPath = Some(targetPath))
@@ -395,9 +396,9 @@ class DeltaHelperSpec
     it("should copy table from existing one using table name") {
       val path = (os.pwd / "tmp" / "delta-copy-from-existing-tb-name").toString()
 
-      val df: DataFrame = createBaseDeltaTableWithPartitions(path,Seq("lastname"))
-      val deltaTable = DeltaTable.forPath(path)
-      val tableName  = "students"
+      val df: DataFrame = createBaseDeltaTableWithPartitions(path, Seq("lastname"), partRows)
+      val deltaTable    = DeltaTable.forPath(path)
+      val tableName     = "students"
       DeltaHelpers.copyTable(deltaTable, targetTableName = Some(tableName))
       assertSmallDataFrameEquality(
         DeltaTable.forName(spark, tableName).toDF,
@@ -410,8 +411,8 @@ class DeltaHelperSpec
     it("should fail to copy when no table name or target path is set") {
       val path = (os.pwd / "tmp" / "delta-copy-non-destination").toString()
 
-      val df: DataFrame = createBaseDeltaTableWithPartitions(path,Seq("lastname"))
-      val deltaTable = DeltaTable.forPath(path)
+      val df: DataFrame = createBaseDeltaTableWithPartitions(path, Seq("lastname"), partRows)
+      val deltaTable    = DeltaTable.forPath(path)
       val exceptionMessage = intercept[JodieValidationError] {
         DeltaHelpers.copyTable(deltaTable)
       }.getMessage
@@ -420,11 +421,11 @@ class DeltaHelperSpec
     }
 
     it("should fail to copy when both table name and target path are set") {
-      val path = (os.pwd / "tmp" / "delta-copy-two-destination").toString()
-      val df: DataFrame = createBaseDeltaTableWithPartitions(path,Seq("lastname"))
-      val deltaTable = DeltaTable.forPath(path)
-      val tableName  = "students"
-      val tablePath  = (os.pwd / "tmp" / "delta-copy-from-existing-target-path").toString()
+      val path          = (os.pwd / "tmp" / "delta-copy-two-destination").toString()
+      val df: DataFrame = createBaseDeltaTableWithPartitions(path, Seq("lastname"), partRows)
+      val deltaTable    = DeltaTable.forPath(path)
+      val tableName     = "students"
+      val tablePath     = (os.pwd / "tmp" / "delta-copy-from-existing-target-path").toString()
       val exceptionMessage = intercept[JodieValidationError] {
         DeltaHelpers.copyTable(deltaTable, Some(tablePath), Some(tableName))
       }.getMessage
@@ -552,7 +553,7 @@ class DeltaHelperSpec
         .save(path)
 
       val deltaTable = DeltaTable.forPath(path)
-      val result = DeltaHelpers.findCompositeKeyCandidate(deltaTable, Seq("id"))
+      val result     = DeltaHelpers.findCompositeKeyCandidate(deltaTable, Seq("id"))
 
       assertResult(Nil)(result)
     }
@@ -571,8 +572,8 @@ class DeltaHelperSpec
         .mode("overwrite")
         .save(path)
       val deltaTable = DeltaTable.forPath(path)
-      val result = DeltaHelpers.findCompositeKeyCandidate(deltaTable, Seq("id"))
-      val expected = Seq("firstname", "lastname")
+      val result     = DeltaHelpers.findCompositeKeyCandidate(deltaTable, Seq("id"))
+      val expected   = Seq("firstname", "lastname")
       assertResult(expected)(result)
     }
 
@@ -591,8 +592,8 @@ class DeltaHelperSpec
         .option("delta.logRetentionDuration", "interval 30 days")
         .save(path)
       val deltaTable = DeltaTable.forPath(path)
-      val result = DeltaHelpers.findCompositeKeyCandidate(deltaTable)
-      val expected = Seq("id")
+      val result     = DeltaHelpers.findCompositeKeyCandidate(deltaTable)
+      val expected   = Seq("id")
       assertResult(expected)(result)
     }
   }
@@ -644,67 +645,144 @@ class DeltaHelperSpec
         (3, "Jose", "Travolta", "1f1ac7f74f43eff911a92f7e28069271")
       ).toDF("id", "firstname", "lastname", "unique_id")
 
-
       assertSmallDataFrameEquality(
         actualDF = resultDF,
         expectedDF = expectedDF,
         ignoreNullable = true,
-        orderedComparison = false)
+        orderedComparison = false
+      )
     }
   }
 
   describe("Generate metrics for optimize functions on Delta Table") {
     it("should return valid file sizes and num records for non partitioned tables") {
       val path = (os.pwd / "tmp" / "delta-table-non-partitioned").toString()
-      createBaseDeltaTable(path)
-      val fileSizeDF = DeltaHelpers.deltaFileSizeDistribution(path)
+      createBaseDeltaTable(path, rows)
+      val fileSizeDF   = DeltaHelpers.deltaFileSizeDistribution(path)
       val numRecordsDF = DeltaHelpers.deltaNumRecordDistribution(path)
-      fileSizeDF.count() should equal(1l)
-      assertDistributionCount(fileSizeDF, (0, 1l, 1088.0, null, 1088l, 1088l, Array(1088, 1088, 1088, 1088, 1088, 1088)))
-      numRecordsDF.count() should equal(1l)
-      assertDistributionCount(numRecordsDF, (0, 1l, 7.0, null, 7l, 7l, Array(7, 7, 7, 7, 7, 7)))
+      fileSizeDF.count() should equal(1L)
+      assertDistributionCount(
+        fileSizeDF,
+        (0, 1L, 1088.0, null, 1088L, 1088L, Array(1088, 1088, 1088, 1088, 1088, 1088))
+      )
+      numRecordsDF.count() should equal(1L)
+      assertDistributionCount(numRecordsDF, (0, 1L, 7.0, null, 7L, 7L, Array(7, 7, 7, 7, 7, 7)))
     }
     it("should return valid file sizes and num records for single partitioned tables") {
       val path = (os.pwd / "tmp" / "delta-table-single-partition").toString()
-      createBaseDeltaTableWithPartitions(path, Seq("lastname"))
-      val fileSizeDF = DeltaHelpers.deltaFileSizeDistribution(path, Some("lastname='Travolta'"))
+      createBaseDeltaTableWithPartitions(path, Seq("lastname"), partRows)
+      val fileSizeDF   = DeltaHelpers.deltaFileSizeDistribution(path, Some("lastname='Travolta'"))
       val numRecordsDF = DeltaHelpers.deltaNumRecordDistribution(path, Some("lastname='Travolta'"))
-      fileSizeDF.count() should equal(1l)
-      assertDistributionCount(fileSizeDF, (1, 1l, 756.0, null, 756, 756, Array(756, 756, 756, 756, 756, 756)))
-      numRecordsDF.count() should equal(1l)
-      assertDistributionCount(numRecordsDF, (1, 1l, 3.0, null, 3, 3, Array(3, 3, 3, 3, 3, 3)))
+      fileSizeDF.count() should equal(1L)
+      assertDistributionCount(
+        fileSizeDF,
+        (1, 1L, 756.0, null, 756, 756, Array(756, 756, 756, 756, 756, 756))
+      )
+      numRecordsDF.count() should equal(1L)
+      assertDistributionCount(numRecordsDF, (1, 1L, 3.0, null, 3, 3, Array(3, 3, 3, 3, 3, 3)))
     }
     it("should return valid file sizes and num records for multiple partitioned tables") {
       val path = (os.pwd / "tmp" / "delta-table-multi-partition").toString()
-      createBaseDeltaTableWithPartitions(path, Seq("lastname", "firstname"))
-      val fileSizeDF = DeltaHelpers.deltaFileSizeDistribution(path, Some("lastname='Travolta' and firstname='Jose'"))
-      val numRecordsDF = DeltaHelpers.deltaNumRecordDistribution(path, Some("lastname='Travolta' and firstname='Jose'"))
-      fileSizeDF.count() should equal(1l)
-      assertDistributionCount(fileSizeDF, (2, 1l, 456.0, null, 456, 456, Array(456, 456, 456, 456, 456, 456)))
-      numRecordsDF.count() should equal(1l)
-      assertDistributionCount(numRecordsDF, (2, 1l, 2.0, null, 2, 2, Array(2, 2, 2, 2, 2, 2)))
+      createBaseDeltaTableWithPartitions(path, Seq("lastname", "firstname"), partRows)
+      val fileSizeDF = DeltaHelpers.deltaFileSizeDistribution(
+        path,
+        Some("lastname='Travolta' and firstname='Jose'")
+      )
+      val numRecordsDF = DeltaHelpers.deltaNumRecordDistribution(
+        path,
+        Some("lastname='Travolta' and firstname='Jose'")
+      )
+      fileSizeDF.count() should equal(1L)
+      assertDistributionCount(
+        fileSizeDF,
+        (2, 1L, 456.0, null, 456, 456, Array(456, 456, 456, 456, 456, 456))
+      )
+      numRecordsDF.count() should equal(1L)
+      assertDistributionCount(numRecordsDF, (2, 1L, 2.0, null, 2, 2, Array(2, 2, 2, 2, 2, 2)))
     }
 
-    it("should return valid file sizes in megabytes"){
+    it("should return valid file sizes in megabytes") {
       val path = (os.pwd / "tmp" / "delta-table-multi-files").toString()
-      def getDF(partition:String) = {
-        (1 to 10000).toDF("id")
+      def getDF(partition: String) = {
+        (1 to 10000)
+          .toDF("id")
           .collect()
           .map(_.getInt(0))
           .map(id => (id, partition, id + 10))
           .toSeq
       }
       (getDF("dog") ++ getDF("cat") ++ getDF("bird"))
-        .toDF("id", "animal", "age").write.mode("overwrite")
-        .format("delta").partitionBy("animal").save(path)
+        .toDF("id", "animal", "age")
+        .write
+        .mode("overwrite")
+        .format("delta")
+        .partitionBy("animal")
+        .save(path)
       val fileSizeDF = DeltaHelpers.deltaFileSizeDistributionInMB(path)
-      val size = 0.07698249816894531
+      val size       = 0.07698249816894531
       fileSizeDF.count() should equal(3)
-      assertDistributionCount(fileSizeDF, (1, 1l, size, null, size, size, Array(size, size, size, size, size, size)))
+      assertDistributionCount(
+        fileSizeDF,
+        (1, 1L, size, null, size, size, Array(size, size, size, size, size, size))
+      )
+    }
+
+    describe("Generate file overlap metrics on running filter queries") {
+      it("should return valid metrics for partitioned tables") {
+        val path = (os.pwd / "tmp" / "delta-table-min-max-part").toString()
+        spark.conf.set("spark.sql.files.maxRecordsPerFile","4")
+        createBaseDeltaTableWithPartitions(path, Seq("lastname"), minMaxRows)
+
+        val actualWithJustPartition = DeltaHelpers.getNumShuffleFiles(path, "lastname = 'Travolta'")
+        actualWithJustPartition should equal((3, 7, 3, 7, 7, 7, List()))
+        // Min Max Query
+        val actualWithMinMax = DeltaHelpers.getNumShuffleFiles(path, "lastname = 'Travolta' and id >= 10 and id <= 12")
+        actualWithMinMax should equal((2, 5, 3, 7, 7, 7, List()))
+
+        val actualLessor = DeltaHelpers.getNumShuffleFiles(path, "id <= 10 ")
+        actualLessor should equal((4, 4, 7, 7, 7, 7, List()))
+        val actualGreater = DeltaHelpers.getNumShuffleFiles(path, "id >= 12")
+        actualGreater should equal((5, 5, 7, 7, 7, 7, List()))
+
+
+        val actualWithWrongCondition = DeltaHelpers.getNumShuffleFiles(path, "lastname = 'Travolta' and id <= 10 and id >= 12")
+        actualWithWrongCondition should equal((0, 2, 3, 7, 7, 7, List()))
+      }
+      it("should return valid metrics for non partitioned tables") {
+        val path = (os.pwd / "tmp" / "delta-table-min-max-no-part").toString()
+        spark.conf.set("spark.sql.files.maxRecordsPerFile","4")
+        createBaseDeltaTable(path, minMaxRows)
+
+        val actualLessor = DeltaHelpers.getNumShuffleFiles(path, "id <= 10 ")
+        actualLessor should equal((3, 3, 6, 6, 6, 6, List()))
+        val actualGreater = DeltaHelpers.getNumShuffleFiles(path, "id >= 12")
+        actualGreater should equal((4, 4, 6, 6, 6, 6, List()))
+        // Min Max Query
+        val actualWithMinMax = DeltaHelpers.getNumShuffleFiles(path, "id >= 10 and id <= 12")
+        actualWithMinMax should equal((1, 1, 6, 6, 6, 6, List()))
+
+
+        val actualWithMinMaxLike = DeltaHelpers.getNumShuffleFiles(path, "id >= 10 and id <= 12 and firstname like '%Joh%'")
+        actualWithMinMaxLike should equal((1, 1, 6, 6, 6, 6, List()))
+        val actualWithWrongCondition = DeltaHelpers.getNumShuffleFiles(path, "lastname = 'Travolta' and id <= 10 and id >= 12")
+        actualWithWrongCondition should equal((1, 1, 6, 6, 6, 6, List()))
+      }
+      it("should return valid metrics even when unresolved column names are present in the query") {
+        val path = (os.pwd / "tmp" / "delta-table-min-max-with-part").toString()
+        spark.conf.set("spark.sql.files.maxRecordsPerFile","4")
+        createBaseDeltaTableWithPartitions(path, Seq("lastname"), minMaxRows)
+
+        val actualWithWrongCondition = DeltaHelpers.getNumShuffleFiles(path, "snapshot.id = update.id and lastname = 'Travolta' and id >= 10 and id <= 12")
+        actualWithWrongCondition should equal((2, 5, 3, 7, 7, 7, List("snapshot.id", "update.id")))
+      }
+      spark.conf.set("spark.sql.files.maxRecordsPerFile",0)
     }
   }
 
-  private def assertDistributionCount(df: DataFrame, expected: (Int, Long, Double, Any, Any, Any, Array[Double])) = {
+  private def assertDistributionCount(
+      df: DataFrame,
+      expected: (Int, Long, Double, Any, Any, Any, Array[Double])
+  ) = {
     val actual = df.take(1)(0)
     actual.getAs[mutable.WrappedArray[(String, String)]](0).length should equal(expected._1)
     actual.getAs[Long](1) should equal(expected._2)
@@ -714,29 +792,53 @@ class DeltaHelperSpec
     actual.getAs[Long](5) should equal(expected._6)
     actual.getAs[Array[Double]](6) should equal(expected._7)
   }
+  val rows = Seq(
+    (1, "Benito", "Jackson"),
+    (2, "Maria", "Willis"),
+    (3, "Jose", "Travolta"),
+    (4, "Benito", "Jackson"),
+    (5, "Jose", "Travolta"),
+    (6, "Jose", "Travolta"),
+    (7, "Maria", "Pitt")
+  )
 
-  private def createBaseDeltaTable(path: String): Unit = {
-    val df = Seq(
-      (1, "Benito", "Jackson"),
-      (2, "Maria", "Willis"),
-      (3, "Jose", "Travolta"),
-      (4, "Benito", "Jackson"),
-      (5, "Jose", "Travolta"),
-      (6, "Jose", "Travolta"),
-      (7, "Maria", "Pitt")
-    ).toDF("id", "firstname", "lastname")
-    df.write.format("delta").mode("overwrite").save(path)
+  val partRows = Seq(
+    (1, "Benito", "Jackson"),
+    (2, "Maria", "Willis"),
+    (3, "Jose", "Travolta"),
+    (4, "Patricia", "Jackson"),
+    (5, "Jose", "Travolta"),
+    (6, "Gabriela", "Travolta"),
+    (7, "Maria", "Pitt")
+  )
+  val minMaxRows: Seq[(Int, String, String)] = rows ++ Seq(
+    (8, "Benito", "Jackson"),
+    (9, "Maria", "Willis"),
+    (10, "Jose", "Travolta"),
+    (11, "Benito", "Jackson"),
+    (12, "Jose", "Travolta"),
+    (13, "Jose", "Travolta"),
+    (14, "Maria", "Pitt"),
+    (15, "Jose", "Travolta"),
+    (16, "Jose", "Travolta"),
+    (17, "Maria", "Pitt"),
+    (18, "Benito", "Jackson"),
+    (19, "Maria", "Willis"),
+    (20, "Jose", "Travolta"),
+    (21, "Benito", "Jackson"),
+    (22, "Jose", "Travolta"),
+    (23, "Jose", "Travolta"),
+    (24, "Maria", "Pitt")
+  )
+  private def createBaseDeltaTable(path: String, data: Seq[(Int, String, String)]): Unit = {
+    data.toDF("id", "firstname", "lastname").write.format("delta").mode("overwrite").save(path)
   }
-  private def createBaseDeltaTableWithPartitions(path: String, partitionBy: Seq[String]) = {
-    val df = Seq(
-      (1, "Benito", "Jackson"),
-      (2, "Maria", "Willis"),
-      (3, "Jose", "Travolta"),
-      (4, "Patricia", "Jackson"),
-      (5, "Jose", "Travolta"),
-      (6, "Gabriela", "Travolta"),
-      (7, "Maria", "Pitt")
-    ).toDF("id", "firstname", "lastname")
+  private def createBaseDeltaTableWithPartitions(
+      path: String,
+      partitionBy: Seq[String],
+      data: Seq[(Int, String, String)]
+  ) = {
+    val df = data.toDF("id", "firstname", "lastname")
     df.write
       .format("delta")
       .mode("overwrite")

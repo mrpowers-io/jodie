@@ -2,10 +2,12 @@ package mrpowers.jodie
 
 import io.delta.tables._
 import mrpowers.jodie.delta.DeltaConstants._
+import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.delta.DeltaLog
 import org.apache.spark.sql.expressions.Window.partitionBy
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.{DataFrame, Row, SaveMode, SparkSession}
 
 import scala.collection.mutable
 
@@ -71,6 +73,94 @@ object DeltaHelpers {
   def deltaNumRecordDistribution(path: String, condition: Option[String] = None): DataFrame =
     getAllPartitionStats(deltaFileStats(path, condition), statsPartitionColumn, numRecordsColumn).toDF(numRecordsDFColumns: _*)
 
+  /**
+   * Gets the number of shuffle files (part files for parquet) that will be pulled into memory for a given condition.
+   * @param path
+   * @param condition
+   * @return
+   */
+  def getNumShuffleFiles(path: String, condition: String) = {
+    val (deltaLog, unresolvedColumns, targetOnlyPredicates, minMaxOnlyExpressions, equalOnlyExpressions,
+    otherExpressions, removedPredicates) = getResolvedExpressions(path, condition)
+    deltaLog.withNewTransaction { deltaTxn =>
+      (deltaTxn.filterFiles(targetOnlyPredicates).count(a => true),
+        deltaTxn.filterFiles(minMaxOnlyExpressions).count(a => true),
+        deltaTxn.filterFiles(equalOnlyExpressions).count(a => true),
+        deltaTxn.filterFiles(otherExpressions).count(a => true),
+        deltaTxn.filterFiles(removedPredicates).count(a => true),
+        deltaLog.snapshot.filesWithStatsForScan(Nil).count(),
+        unresolvedColumns)
+    }
+  }
+
+  def getShuffleFileMetadata(path: String, condition: String)
+  = {
+    val (deltaLog, unresolvedColumns, targetOnlyPredicates, minMaxOnlyExpressions, equalOnlyExpressions,otherExpressions, removedPredicates) = getResolvedExpressions(path, condition)
+    deltaLog.withNewTransaction { deltaTxn =>
+      (deltaTxn.filterFiles(targetOnlyPredicates),
+        deltaTxn.filterFiles(minMaxOnlyExpressions),
+        deltaTxn.filterFiles(equalOnlyExpressions),
+        deltaTxn.filterFiles(otherExpressions),
+        deltaTxn.filterFiles(removedPredicates),
+        deltaLog.snapshot.filesWithStatsForScan(Nil),
+        unresolvedColumns)
+    }
+  }
+  private def getResolvedExpressions(path: String, condition: String) = {
+    val spark = SparkSession.active
+    val deltaTable = DeltaTable.forPath(path)
+    val deltaLog = DeltaLog.forTable(spark, path)
+
+    val expression = functions.expr(condition).expr
+    val targetPlan = deltaTable.toDF.queryExecution.analyzed
+    val resolvedExpression: Expression = spark.sessionState.analyzer.resolveExpressionByPlanOutput(expression, targetPlan, true)
+    val unresolvedColumns = if (!resolvedExpression.childrenResolved) {
+      resolvedExpression.references.filter(a => a match {
+        case b: UnresolvedAttribute => true
+        case _ => false
+      }).map(a => a.asInstanceOf[UnresolvedAttribute].sql).toSeq
+    } else Seq()
+
+    def splitConjunctivePredicates(condition: Expression): Seq[Expression] = {
+      condition match {
+        case And(cond1, cond2) =>
+          splitConjunctivePredicates(cond1) ++ splitConjunctivePredicates(cond2)
+        case other => other :: Nil
+      }
+    }
+
+    val splitExpressions = splitConjunctivePredicates(resolvedExpression)
+    val targetOnlyPredicates = splitExpressions.filter(_.references.subsetOf(targetPlan.outputSet))
+
+    val minMaxOnlyExpressions = targetOnlyPredicates.filter(e => e match {
+      case GreaterThanOrEqual(_, _) => true
+      case LessThanOrEqual(_, _) => true
+      case LessThan(_, _) => true
+      case GreaterThan(_, _) => true
+      case _ => false
+    })
+
+    val equalOnlyExpressions = targetOnlyPredicates.filter(e => e match {
+      case EqualTo(_, _) => true
+      case EqualNullSafe(_, _) => true
+      case _ => false
+    })
+
+    val otherExpressions = targetOnlyPredicates.filter(e => e match {
+      case EqualTo(_, _) => false
+      case EqualNullSafe(_, _) => false
+      case GreaterThanOrEqual(_, _) => false
+      case LessThanOrEqual(_, _) => false
+      case LessThan(_, _) => false
+      case GreaterThan(_, _) => false
+      case _ => true
+    })
+
+    val removedPredicates = splitExpressions.filterNot(_.references.subsetOf(targetPlan.outputSet))
+
+    (deltaLog, unresolvedColumns, targetOnlyPredicates, minMaxOnlyExpressions, equalOnlyExpressions, otherExpressions, removedPredicates)
+  }
+
 
   private def getAllPartitionStats(filteredDF: DataFrame, groupByCol: String, aggCol: String) = filteredDF
     .groupBy(map_entries(col(groupByCol)))
@@ -92,7 +182,7 @@ object DeltaHelpers {
     val snapshot = tableLog.snapshot
     condition match {
       case None => snapshot.filesWithStatsForScan(Nil)
-      case Some(value) => snapshot.filesWithStatsForScan(Seq(expr(value).expr))
+      case Some(value) => snapshot.filesWithStatsForScan(Seq(functions.expr(value).expr))
     }
   }
 
