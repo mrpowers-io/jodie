@@ -74,7 +74,24 @@ object DeltaHelpers {
     getAllPartitionStats(deltaFileStats(path, condition), statsPartitionColumn, numRecordsColumn).toDF(numRecordsDFColumns: _*)
 
   /**
-   * Gets the number of shuffle files (part files for parquet) that will be pulled into memory for a given condition.
+   * Gets the number of shuffle files (part files for parquet) that will be pulled into memory for a given filter condition.
+   * This is particularly useful in a Delta Merge operation where the number of shuffle files can be a bottleneck. Running
+   * the merge condition through this method can give an idea about the amount of memory resources required to run the merge.
+   *
+   * For example, if the condition is "country = 'GBR' and age >= 30 and age <= 40 and firstname like '%Jo%' " and country
+   * is the partition column, then the output might look like => (18, 100, 300, 600, 800, 800, List())
+   * 18 - number of files that will be pulled into memory for the entire provided condition
+   * 100 - number of files signifying the greater than/less than part => "age >= 30 and age <= 40"
+   * 300 - number of files signifying the equals part => "country = 'GBR'
+   * 600 - number of files signifying the like (or any other) part => "firstname like '%Jo%' "
+   * 800 - number of files signifying any other part. This is mostly a failsafe
+   * 1. to capture any other condition that might have been missed
+   * 2. If wrong attribute names or conditions are provided like snapshot.id = source.id (usually found in merge conditions)
+   * 800 - Total no. of files in the Delta Table
+   * List() - List of unresolved columns/attributes in the provided condition
+   *
+   * This function works only on the Delta Log and does not scan any data in the Delta Table.
+   *
    * @param path
    * @param condition
    * @return
