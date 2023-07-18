@@ -3,6 +3,7 @@ package mrpowers.jodie
 import com.github.mrpowers.spark.daria.sql.SparkSessionExt.SparkSessionMethods
 import com.github.mrpowers.spark.fast.tests.DataFrameComparer
 import io.delta.tables.DeltaTable
+import mrpowers.jodie.delta.DeltaConstants._
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.types.{IntegerType, StringType}
 import org.scalatest.BeforeAndAfterEach
@@ -703,6 +704,7 @@ class DeltaHelperSpec
 
     it("should return valid file sizes in megabytes") {
       val path = (os.pwd / "tmp" / "delta-table-multi-files").toString()
+
       def getDF(partition: String) = {
         (1 to 10000)
           .toDF("id")
@@ -711,6 +713,7 @@ class DeltaHelperSpec
           .map(id => (id, partition, id + 10))
           .toSeq
       }
+
       (getDF("dog") ++ getDF("cat") ++ getDF("bird"))
         .toDF("id", "animal", "age")
         .write
@@ -730,68 +733,104 @@ class DeltaHelperSpec
     describe("Generate file overlap metrics on running filter queries") {
       it("should return valid metrics for partitioned tables") {
         val path = (os.pwd / "tmp" / "delta-table-min-max-part").toString()
-        spark.conf.set("spark.sql.files.maxRecordsPerFile","4")
+        spark.conf.set("spark.sql.files.maxRecordsPerFile", "4")
         createBaseDeltaTableWithPartitions(path, Seq("lastname"), minMaxRows)
 
-        val actualWithJustPartition = DeltaHelpers.getNumShuffleFiles(path, "lastname = 'Travolta'")
-        actualWithJustPartition should equal((3, 7, 3, 7, 7, 7, List()))
+        assertNumFilesCount(
+          DeltaHelpers.getNumShuffleFiles(path, "lastname = 'Travolta'"),
+          (3, 7, 3, 7, 7, 7, List())
+        )
         // Min Max Query
-        val actualWithMinMax = DeltaHelpers.getNumShuffleFiles(path, "lastname = 'Travolta' and id >= 10 and id <= 12")
-        actualWithMinMax should equal((2, 5, 3, 7, 7, 7, List()))
-
-        val actualLessor = DeltaHelpers.getNumShuffleFiles(path, "id <= 10 ")
-        actualLessor should equal((4, 4, 7, 7, 7, 7, List()))
-        val actualGreater = DeltaHelpers.getNumShuffleFiles(path, "id >= 12")
-        actualGreater should equal((5, 5, 7, 7, 7, 7, List()))
-
-
-        val actualWithWrongCondition = DeltaHelpers.getNumShuffleFiles(path, "lastname = 'Travolta' and id <= 10 and id >= 12")
-        actualWithWrongCondition should equal((0, 2, 3, 7, 7, 7, List()))
+        assertNumFilesCount(
+          DeltaHelpers.getNumShuffleFiles(
+            path,
+            "lastname = 'Travolta' " +
+              "and id >= 10 and id <= 12"
+          ),
+          (2, 5, 3, 7, 7, 7, List())
+        )
+        assertNumFilesCount(
+          DeltaHelpers.getNumShuffleFiles(path, "id <= 10 "),
+          (4, 4, 7, 7, 7, 7, List())
+        )
+        assertNumFilesCount(
+          DeltaHelpers.getNumShuffleFiles(path, "id >= 12"),
+          (5, 5, 7, 7, 7, 7, List())
+        )
+        assertNumFilesCount(
+          DeltaHelpers.getNumShuffleFiles(
+            path,
+            "snapshot.id = update.id and " +
+              "lastname = 'Travolta' and id >= 10 and id <= 12 and firstname like '%Joh%'"
+          ),
+          (2, 5, 3, 7, 7, 7, List("snapshot.id", "update.id"))
+        )
+        assertNumFilesCount(
+          DeltaHelpers.getNumShuffleFiles(path, "lastname = 'Travolta' and id <= 10 and id >= 12"),
+          (0, 2, 3, 7, 7, 7, List())
+        )
       }
       it("should return valid metrics for non partitioned tables") {
         val path = (os.pwd / "tmp" / "delta-table-min-max-no-part").toString()
-        spark.conf.set("spark.sql.files.maxRecordsPerFile","4")
+        spark.conf.set("spark.sql.files.maxRecordsPerFile", "4")
         createBaseDeltaTable(path, minMaxRows)
 
-        val actualLessor = DeltaHelpers.getNumShuffleFiles(path, "id <= 10 ")
-        actualLessor should equal((3, 3, 6, 6, 6, 6, List()))
-        val actualGreater = DeltaHelpers.getNumShuffleFiles(path, "id >= 12")
-        actualGreater should equal((4, 4, 6, 6, 6, 6, List()))
+        assertNumFilesCount(
+          DeltaHelpers.getNumShuffleFiles(path, "id <= 10 "),
+          (3, 3, 6, 6, 6, 6, List())
+        )
+        assertNumFilesCount(
+          DeltaHelpers.getNumShuffleFiles(path, "id >= 12"),
+          (4, 4, 6, 6, 6, 6, List())
+        )
         // Min Max Query
-        val actualWithMinMax = DeltaHelpers.getNumShuffleFiles(path, "id >= 10 and id <= 12")
-        actualWithMinMax should equal((1, 1, 6, 6, 6, 6, List()))
-
-
-        val actualWithMinMaxLike = DeltaHelpers.getNumShuffleFiles(path, "id >= 10 and id <= 12 and firstname like '%Joh%'")
-        actualWithMinMaxLike should equal((1, 1, 6, 6, 6, 6, List()))
-        val actualWithWrongCondition = DeltaHelpers.getNumShuffleFiles(path, "lastname = 'Travolta' and id <= 10 and id >= 12")
-        actualWithWrongCondition should equal((1, 1, 6, 6, 6, 6, List()))
+        assertNumFilesCount(
+          DeltaHelpers.getNumShuffleFiles(path, "id >= 10 and id <= 12"),
+          (1, 1, 6, 6, 6, 6, List())
+        )
+        assertNumFilesCount(
+          DeltaHelpers.getNumShuffleFiles(
+            path,
+            "id >= 10 and id <= 12 " +
+              "and firstname like '%Joh%'"
+          ),
+          (1, 1, 6, 6, 6, 6, List())
+        )
+        assertNumFilesCount(
+          DeltaHelpers.getNumShuffleFiles(
+            path,
+            "lastname = 'Travolta' " +
+              "and id <= 10 and id >= 12"
+          ),
+          (1, 1, 6, 6, 6, 6, List())
+        )
+        assertNumFilesCount(
+          DeltaHelpers.getNumShuffleFiles(
+            path,
+            "id >= 10 and id <= 12 " +
+              "and (firstname = 'John' or firstname = 'Maria')"
+          ),
+          (1, 1, 6, 6, 6, 6, List())
+        )
       }
       it("should return valid metrics even when unresolved column names are present in the query") {
         val path = (os.pwd / "tmp" / "delta-table-min-max-with-part").toString()
-        spark.conf.set("spark.sql.files.maxRecordsPerFile","4")
+        spark.conf.set("spark.sql.files.maxRecordsPerFile", "4")
         createBaseDeltaTableWithPartitions(path, Seq("lastname"), minMaxRows)
 
-        val actualWithWrongCondition = DeltaHelpers.getNumShuffleFiles(path, "snapshot.id = update.id and lastname = 'Travolta' and id >= 10 and id <= 12")
-        actualWithWrongCondition should equal((2, 5, 3, 7, 7, 7, List("snapshot.id", "update.id")))
+        assertNumFilesCount(
+          DeltaHelpers.getNumShuffleFiles(
+            path,
+            "snapshot.id = update.id and " +
+              "lastname = 'Travolta' and id >= 10 and id <= 12"
+          ),
+          (2, 5, 3, 7, 7, 7, List("snapshot.id", "update.id"))
+        )
       }
-      spark.conf.set("spark.sql.files.maxRecordsPerFile",0)
+      spark.conf.set("spark.sql.files.maxRecordsPerFile", 0)
     }
   }
 
-  private def assertDistributionCount(
-      df: DataFrame,
-      expected: (Int, Long, Double, Any, Any, Any, Array[Double])
-  ) = {
-    val actual = df.take(1)(0)
-    actual.getAs[mutable.WrappedArray[(String, String)]](0).length should equal(expected._1)
-    actual.getAs[Long](1) should equal(expected._2)
-    actual.getAs[Double](2) should equal(expected._3)
-    actual.getAs[Double](3) should equal(expected._4)
-    actual.getAs[Long](4) should equal(expected._5)
-    actual.getAs[Long](5) should equal(expected._6)
-    actual.getAs[Array[Double]](6) should equal(expected._7)
-  }
   val rows = Seq(
     (1, "Benito", "Jackson"),
     (2, "Maria", "Willis"),
@@ -830,9 +869,11 @@ class DeltaHelperSpec
     (23, "Jose", "Travolta"),
     (24, "Maria", "Pitt")
   )
+
   private def createBaseDeltaTable(path: String, data: Seq[(Int, String, String)]): Unit = {
     data.toDF("id", "firstname", "lastname").write.format("delta").mode("overwrite").save(path)
   }
+
   private def createBaseDeltaTableWithPartitions(
       path: String,
       partitionBy: Seq[String],
@@ -846,5 +887,44 @@ class DeltaHelperSpec
       .option("delta.logRetentionDuration", "interval 30 days")
       .save(path)
     df
+  }
+
+  private def assertDistributionCount(
+      df: DataFrame,
+      expected: (Int, Long, Double, Any, Any, Any, Array[Double])
+  ) = {
+    val actual = df.take(1)(0)
+    actual.getAs[mutable.WrappedArray[(String, String)]](0).length should equal(expected._1)
+    actual.getAs[Long](1) should equal(expected._2)
+    actual.getAs[Double](2) should equal(expected._3)
+    actual.getAs[Double](3) should equal(expected._4)
+    actual.getAs[Long](4) should equal(expected._5)
+    actual.getAs[Long](5) should equal(expected._6)
+    actual.getAs[Array[Double]](6) should equal(expected._7)
+  }
+
+  private def assertNumFilesCount(
+      actual: Map[String, Any],
+      expected: Tuple7[Int, Int, Int, Int, Int, Long, Seq[String]]
+  ) = {
+    actual.map { a =>
+      if (a._1.contains(OVERALL)) {
+        a._2 should equal(expected._1)
+      } else if (a._1.contains(MIN_MAX)) {
+        a._2 should equal(expected._2)
+      } else if (a._1.contains(EQUALS)) {
+        a._2 should equal(expected._3)
+      } else if (a._1.contains(LEFT_OVER)) {
+        a._2 should equal(expected._4)
+      } else if (a._1.contains(UNRESOLVED)) {
+        a._2 should equal(expected._5)
+      } else if (a._1.contains(TOTAL_NUM_FILES)) {
+        a._2 should equal(expected._6)
+      } else if (a._1.contains(UNRESOLVED_COLS)) {
+        a._2 should equal(expected._7)
+      } else {
+        fail("Unexpected key")
+      }
+    }
   }
 }

@@ -78,8 +78,17 @@ object DeltaHelpers {
    * This is particularly useful in a Delta Merge operation where the number of shuffle files can be a bottleneck. Running
    * the merge condition through this method can give an idea about the amount of memory resources required to run the merge.
    *
-   * For example, if the condition is "country = 'GBR' and age >= 30 and age <= 40 and firstname like '%Jo%' " and country
-   * is the partition column, then the output might look like => (18, 100, 300, 600, 800, 800, List())
+   * For example, if the condition is "snapshot.id = update.id and country = 'GBR' and age >= 30 and age <= 40 and firstname like '%Jo%' "
+   * and country is the partition column, then the output might look like =>
+   * Map(
+   * OVERALL RESOLVED CONDITION => [ (country = 'GBR') and (age >= 30) and (age <= 40) and firstname LIKE '%Joh%' ] -> 18,
+   * GREATER THAN / LESS THAN PART => [ (age >= 30) and (age <= 40) ] -> 100,
+   * EQUALS/EQUALS NULL SAFE PART => [ (country = 'GBR') ] -> 300,
+   * LEFT OVER PART => [ firstname LIKE '%Joh%' ] -> 600,
+   * UNRESOLVED PART => [ (snapshot.id = update.id) ] -> 800,
+   * TOTAL_NUM_FILES_IN_DELTA_TABLE => -> 800,
+   * UNRESOLVED_COLUMNS => -> List(snapshot.id, update.id))
+   *
    * 18 - number of files that will be pulled into memory for the entire provided condition
    * 100 - number of files signifying the greater than/less than part => "age >= 30 and age <= 40"
    * 300 - number of files signifying the equals part => "country = 'GBR'
@@ -87,9 +96,9 @@ object DeltaHelpers {
    * 800 - number of files signifying any other part. This is mostly a failsafe
    * 1. to capture any other condition that might have been missed
    * 2. If wrong attribute names or conditions are provided like snapshot.id = source.id (usually found in merge conditions)
-   * 800 - Total no. of files in the Delta Table
+   * 800 - Total no. of files in the Delta Table without any filter condition or partitions
    * List() - List of unresolved columns/attributes in the provided condition
-   *
+   * Note: Whenever a resolved condition comes back as Empty, the output will contain number of files in the entire Delta Table and can be ignored
    * This function works only on the Delta Log and does not scan any data in the Delta Table.
    *
    * @param path
@@ -100,13 +109,18 @@ object DeltaHelpers {
     val (deltaLog, unresolvedColumns, targetOnlyPredicates, minMaxOnlyExpressions, equalOnlyExpressions,
     otherExpressions, removedPredicates) = getResolvedExpressions(path, condition)
     deltaLog.withNewTransaction { deltaTxn =>
-      (deltaTxn.filterFiles(targetOnlyPredicates).count(a => true),
-        deltaTxn.filterFiles(minMaxOnlyExpressions).count(a => true),
-        deltaTxn.filterFiles(equalOnlyExpressions).count(a => true),
-        deltaTxn.filterFiles(otherExpressions).count(a => true),
-        deltaTxn.filterFiles(removedPredicates).count(a => true),
-        deltaLog.snapshot.filesWithStatsForScan(Nil).count(),
-        unresolvedColumns)
+      Map(s"$OVERALL [ ${formatSQL(targetOnlyPredicates).getOrElse("Empty")} ]" ->
+        deltaTxn.filterFiles(targetOnlyPredicates).count(a => true),
+        s"$MIN_MAX [ ${formatSQL(minMaxOnlyExpressions).getOrElse("Empty")} ]" ->
+          deltaTxn.filterFiles(minMaxOnlyExpressions).count(a => true),
+        s"$EQUALS [ ${formatSQL(equalOnlyExpressions).getOrElse("Empty")} ]" ->
+          deltaTxn.filterFiles(equalOnlyExpressions).count(a => true),
+        s"$LEFT_OVER [ ${formatSQL(otherExpressions).getOrElse("Empty")} ]" ->
+          deltaTxn.filterFiles(otherExpressions).count(a => true),
+        s"$UNRESOLVED [ ${formatSQL(removedPredicates).getOrElse("Empty")} ]" ->
+          deltaTxn.filterFiles(removedPredicates).count(a => true),
+        TOTAL_NUM_FILES -> deltaLog.snapshot.filesWithStatsForScan(Nil).count(),
+        UNRESOLVED_COLS -> unresolvedColumns)
     }
   }
 
