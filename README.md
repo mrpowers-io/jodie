@@ -141,7 +141,6 @@ We can Run the following function to remove all duplicates:
 ```scala
 DeltaHelpers.removeDuplicateRecords(
   deltaTable = deltaTable,
-  primaryKey = "id",
   duplicateColumns = Seq("firstname","lastname")
 )
 ```
