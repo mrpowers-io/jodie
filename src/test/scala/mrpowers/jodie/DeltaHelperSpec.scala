@@ -829,6 +829,23 @@ class DeltaHelperSpec
       }
       spark.conf.set("spark.sql.files.maxRecordsPerFile", 0)
     }
+    it("when rows are not in any order"){
+      val path = (os.pwd / "tmp" / "delta-table-min-max-without-order").toString()
+      spark.conf.set("spark.sql.files.maxRecordsPerFile", "4")
+      createBaseDeltaTable(path, noOrderRows)
+
+      val actualBefore = DeltaHelpers.getNumShuffleFiles(
+        path,
+        "snapshot.id = update.id and " +
+          " id >= 10 and id <= 12 "
+      )
+      DeltaTable.forPath(spark, path).optimize().executeZOrderBy("id")
+      val actualAfter = DeltaHelpers.getNumShuffleFiles(
+        path,
+        "snapshot.id = update.id and " +
+          " id >= 10 and id <= 12 "
+      )
+    }
   }
 
   val rows = Seq(
@@ -868,6 +885,33 @@ class DeltaHelperSpec
     (22, "Jose", "Travolta"),
     (23, "Jose", "Travolta"),
     (24, "Maria", "Pitt")
+  )
+
+  val noOrderRows = Seq(
+    (11, "Benito", "Jackson"),
+    (1, "Benito", "Jackson"),
+    (21, "Benito", "Jackson"),
+    (3, "Jose", "Travolta"),
+    (18, "Benito", "Jackson"),
+    (14, "Maria", "Pitt"),
+    (5, "Jose", "Travolta"),
+    (23, "Jose", "Travolta"),
+    (7, "Maria", "Pitt"),
+    (8, "Benito", "Jackson"),
+    (9, "Maria", "Willis"),
+    (10, "Jose", "Travolta"),
+    (17, "Maria", "Pitt"),
+    (12, "Jose", "Travolta"),
+    (16, "Jose", "Travolta"),
+    (4, "Patricia", "Jackson"),
+    (6, "Gabriela", "Travolta"),
+    (19, "Maria", "Willis"),
+    (20, "Jose", "Travolta"),
+    (15, "Jose", "Travolta"),
+    (22, "Jose", "Travolta"),
+    (13, "Jose", "Travolta"),
+    (24, "Maria", "Pitt"),
+    (2, "Maria", "Willis")
   )
 
   private def createBaseDeltaTable(path: String, data: Seq[(Int, String, String)]): Unit = {

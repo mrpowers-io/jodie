@@ -6,6 +6,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.delta.DeltaLog
+import org.apache.spark.sql.delta.actions.AddFile
 import org.apache.spark.sql.expressions.Window.partitionBy
 import org.apache.spark.sql.functions._
 
@@ -124,9 +125,9 @@ object DeltaHelpers {
     }
   }
 
-  def getShuffleFileMetadata(path: String, condition: String)
-  = {
-    val (deltaLog, unresolvedColumns, targetOnlyPredicates, minMaxOnlyExpressions, equalOnlyExpressions,otherExpressions, removedPredicates) = getResolvedExpressions(path, condition)
+  def getShuffleFileMetadata(path: String, condition: String):
+  (Seq[AddFile], Seq[AddFile], Seq[AddFile], Seq[AddFile], Seq[AddFile], DataFrame, Seq[String]) = {
+    val (deltaLog, unresolvedColumns, targetOnlyPredicates, minMaxOnlyExpressions, equalOnlyExpressions, otherExpressions, removedPredicates) = getResolvedExpressions(path, condition)
     deltaLog.withNewTransaction { deltaTxn =>
       (deltaTxn.filterFiles(targetOnlyPredicates),
         deltaTxn.filterFiles(minMaxOnlyExpressions),
