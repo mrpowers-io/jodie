@@ -441,7 +441,8 @@ DeltaHelpers.deltaNumRecordDistribution(path)
 ## Number of Shuffle Files in Merge & Other Filter Conditions
 
 The function `getNumShuffleFiles` gets the number of shuffle files (think of part files in parquet) that will be pulled into memory for a given filter condition. This is particularly useful to estimate memory requirements in a Delta Merge operation where the number of shuffle files can be a bottleneck. 
-To better tune your jobs, you can use this function to get the number of shuffle files for different kinds of filter condition and then perform operations like merge, zorder, compaction etc. to see if you reach the desired no. of shuffle files. This method does not query data and is completely based on the Delta Log.
+To better tune your jobs, you can use this function to get the number of shuffle files for different kinds of filter condition and then perform operations like merge, zorder, compaction etc. to see if you reach the desired no. of shuffle files.
+
 
 For example, if the condition is "country = 'GBR' and age >= 30 and age <= 40 and firstname like '%Jo%' " and country is the partition column, 
 ```scala
@@ -470,6 +471,8 @@ Map(
   // Will be empty if all columns are resolved.
   "UNRESOLVED_COLUMNS =>" -> List())
 ```
+
+Another important use case this method can help with is to see the min-max range overlap. Adding a min max on a high cardinality column like id say `id >= 900 and id <= 5000` can actually help in reducing the no. of shuffle files delta lake pulls into memory. However, such a operation is not always guaranteed to work and the effect can be viewed when you run this method.
 
 This function works only on the Delta Log and does not scan any data in the Delta Table.
 
