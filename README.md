@@ -439,25 +439,36 @@ DeltaHelpers.deltaNumRecordDistribution(path)
 ```
 
 ## Number of Shuffle Files in Merge & Other Filter Conditions
-The function `getNumShuffleFiles` gets the number of shuffle files (part files for parquet) that will be pulled into memory for a given filter condition. This is particularly useful in a Delta Merge operation where the number of shuffle files can be a bottleneck. 
-Running the merge condition through this method can give an idea about the amount of memory resources required to run the merge.
+
+The function `getNumShuffleFiles` gets the number of shuffle files (think of part files in parquet) that will be pulled into memory for a given filter condition. This is particularly useful to estimate memory requirements in a Delta Merge operation where the number of shuffle files can be a bottleneck. 
+To better tune your jobs, you can use this function to get the number of shuffle files for different kinds of filter condition and then perform operations like merge, zorder, compaction etc. to see if you reach the desired no. of shuffle files. This method does not query data and is completely based on the Delta Log.
+
 For example, if the condition is "country = 'GBR' and age >= 30 and age <= 40 and firstname like '%Jo%' " and country is the partition column, 
 ```scala
 DeltaHelpers.getNumShuffleFiles(path, "country = 'GBR' and age >= 30 and age <= 40 and firstname like '%Jo%' ")
 ```
 
-then the output might look like 
+then the output might look like following (explaining different parts of the condition as a key in the `Map` and the value contains the file count)
 ```scala
-(18, 100, 300, 600, 800, 800, List())
-// 18 - number of files that will be pulled into memory for the entire provided condition
-// 100 - number of files signifying the greater than/less than part => "age >= 30 and age <= 40"
-// 300 - number of files signifying the equals part => "country = 'GBR'
-// 600 - number of files signifying the like (or any other) part => "firstname like '%Jo%' "
-// 800 - number of files signifying any other part. This is mostly a failsafe
-//       1. to capture any other condition that might have been missed
-//       2. If wrong attribute names or conditions are provided like snapshot.id = source.id (usually found in merge conditions)
-// 800 - Total no. of files in the Delta Table
-// List() - List of unresolved columns/attributes in the provided condition
+Map(
+  // number of files that will be pulled into memory for the entire provided condition
+  "OVERALL RESOLVED CONDITION => [ (country = 'GBR') and (age >= 30) and" +
+  " (age = 40) and firstname LIKE '%Joh%' ]" -> 18,
+  // number of files signifying the greater than/less than part => "age >= 30 and age <= 40"
+  "GREATER THAN / LESS THAN PART => [ (age >= 30) and (age = 40) ]" -> 100,
+  // number of files signifying the equals part => "country = 'GBR'
+  "EQUALS/EQUALS NULL SAFE PART => [ (country = 'GBR') ]" -> 300,
+  // number of files signifying the like (or any other) part => "firstname like '%Jo%' "
+  "LEFT OVER PART => [ firstname LIKE '%Joh%' ]" -> 600,
+  // number of files signifying any other part. This is mostly a failsafe
+  //   1. to capture any other condition that might have been missed
+  //   2. If wrong attribute names or conditions are provided like snapshot.id = source.id (usually found in merge conditions)
+  "UNRESOLVED PART => [ (snapshot.id = update.id) ]" -> 800,
+  // Total no. of files in the Delta Table
+  "TOTAL_NUM_FILES_IN_DELTA_TABLE =>" -> 800,
+  // List of unresolved columns/attributes in the provided condition. 
+  // Will be empty if all columns are resolved.
+  "UNRESOLVED_COLUMNS =>" -> List())
 ```
 
 This function works only on the Delta Log and does not scan any data in the Delta Table.
