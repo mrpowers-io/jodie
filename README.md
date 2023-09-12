@@ -476,6 +476,7 @@ Another important use case this method can help with is to see the min-max range
 
 This function works only on the Delta Log and does not scan any data in the Delta Table.
 
+If you want more information about these individual files and their metadata, consider using the `getShuffleFileMetadata` function.
 ## Change Data Feed Helpers
 
 ### CASE I - When Delta aka Transaction Log gets purged
