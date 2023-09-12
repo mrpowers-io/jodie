@@ -2,10 +2,13 @@ package mrpowers.jodie
 
 import io.delta.tables._
 import mrpowers.jodie.delta.DeltaConstants._
+import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.delta.DeltaLog
+import org.apache.spark.sql.delta.actions.AddFile
 import org.apache.spark.sql.expressions.Window.partitionBy
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.{DataFrame, Row, SaveMode, SparkSession}
 
 import scala.collection.mutable
 
@@ -71,6 +74,125 @@ object DeltaHelpers {
   def deltaNumRecordDistribution(path: String, condition: Option[String] = None): DataFrame =
     getAllPartitionStats(deltaFileStats(path, condition), statsPartitionColumn, numRecordsColumn).toDF(numRecordsDFColumns: _*)
 
+  /**
+   * Gets the number of shuffle files (part files for parquet) that will be pulled into memory for a given filter condition.
+   * This is particularly useful in a Delta Merge operation where the number of shuffle files can be a bottleneck. Running
+   * the merge condition through this method can give an idea about the amount of memory resources required to run the merge.
+   *
+   * For example, if the condition is "snapshot.id = update.id and country = 'GBR' and age >= 30 and age <= 40 and firstname like '%Jo%' "
+   * and country is the partition column, then the output might look like =>
+   * Map(
+   * OVERALL RESOLVED CONDITION => [ (country = 'GBR') and (age >= 30) and (age <= 40) and firstname LIKE '%Joh%' ] -> 18,
+   * GREATER THAN / LESS THAN PART => [ (age >= 30) and (age <= 40) ] -> 100,
+   * EQUALS/EQUALS NULL SAFE PART => [ (country = 'GBR') ] -> 300,
+   * LEFT OVER PART => [ firstname LIKE '%Joh%' ] -> 600,
+   * UNRESOLVED PART => [ (snapshot.id = update.id) ] -> 800,
+   * TOTAL_NUM_FILES_IN_DELTA_TABLE => -> 800,
+   * UNRESOLVED_COLUMNS => -> List(snapshot.id, update.id))
+   *
+   * 18 - number of files that will be pulled into memory for the entire provided condition
+   * 100 - number of files signifying the greater than/less than part => "age >= 30 and age <= 40"
+   * 300 - number of files signifying the equals part => "country = 'GBR'
+   * 600 - number of files signifying the like (or any other) part => "firstname like '%Jo%' "
+   * 800 - number of files signifying any other part. This is mostly a failsafe
+   * 1. to capture any other condition that might have been missed
+   * 2. If wrong attribute names or conditions are provided like snapshot.id = source.id (usually found in merge conditions)
+   * 800 - Total no. of files in the Delta Table without any filter condition or partitions
+   * List() - List of unresolved columns/attributes in the provided condition
+   * Note: Whenever a resolved condition comes back as Empty, the output will contain number of files in the entire Delta Table and can be ignored
+   * This function works only on the Delta Log and does not scan any data in the Delta Table.
+   *
+   * @param path
+   * @param condition
+   * @return
+   */
+  def getNumShuffleFiles(path: String, condition: String) = {
+    val (deltaLog, unresolvedColumns, targetOnlyPredicates, minMaxOnlyExpressions, equalOnlyExpressions,
+    otherExpressions, removedPredicates) = getResolvedExpressions(path, condition)
+    deltaLog.withNewTransaction { deltaTxn =>
+      Map(s"$OVERALL [ ${formatSQL(targetOnlyPredicates).getOrElse("Empty")} ]" ->
+        deltaTxn.filterFiles(targetOnlyPredicates).count(a => true),
+        s"$MIN_MAX [ ${formatSQL(minMaxOnlyExpressions).getOrElse("Empty")} ]" ->
+          deltaTxn.filterFiles(minMaxOnlyExpressions).count(a => true),
+        s"$EQUALS [ ${formatSQL(equalOnlyExpressions).getOrElse("Empty")} ]" ->
+          deltaTxn.filterFiles(equalOnlyExpressions).count(a => true),
+        s"$LEFT_OVER [ ${formatSQL(otherExpressions).getOrElse("Empty")} ]" ->
+          deltaTxn.filterFiles(otherExpressions).count(a => true),
+        s"$UNRESOLVED [ ${formatSQL(removedPredicates).getOrElse("Empty")} ]" ->
+          deltaTxn.filterFiles(removedPredicates).count(a => true),
+        TOTAL_NUM_FILES -> deltaLog.snapshot.filesWithStatsForScan(Nil).count(),
+        UNRESOLVED_COLS -> unresolvedColumns)
+    }
+  }
+
+  def getShuffleFileMetadata(path: String, condition: String):
+  (Seq[AddFile], Seq[AddFile], Seq[AddFile], Seq[AddFile], Seq[AddFile], DataFrame, Seq[String]) = {
+    val (deltaLog, unresolvedColumns, targetOnlyPredicates, minMaxOnlyExpressions, equalOnlyExpressions, otherExpressions, removedPredicates) = getResolvedExpressions(path, condition)
+    deltaLog.withNewTransaction { deltaTxn =>
+      (deltaTxn.filterFiles(targetOnlyPredicates),
+        deltaTxn.filterFiles(minMaxOnlyExpressions),
+        deltaTxn.filterFiles(equalOnlyExpressions),
+        deltaTxn.filterFiles(otherExpressions),
+        deltaTxn.filterFiles(removedPredicates),
+        deltaLog.snapshot.filesWithStatsForScan(Nil),
+        unresolvedColumns)
+    }
+  }
+  private def getResolvedExpressions(path: String, condition: String) = {
+    val spark = SparkSession.active
+    val deltaTable = DeltaTable.forPath(path)
+    val deltaLog = DeltaLog.forTable(spark, path)
+
+    val expression = functions.expr(condition).expr
+    val targetPlan = deltaTable.toDF.queryExecution.analyzed
+    val resolvedExpression: Expression = spark.sessionState.analyzer.resolveExpressionByPlanOutput(expression, targetPlan, true)
+    val unresolvedColumns = if (!resolvedExpression.childrenResolved) {
+      resolvedExpression.references.filter(a => a match {
+        case b: UnresolvedAttribute => true
+        case _ => false
+      }).map(a => a.asInstanceOf[UnresolvedAttribute].sql).toSeq
+    } else Seq()
+
+    def splitConjunctivePredicates(condition: Expression): Seq[Expression] = {
+      condition match {
+        case And(cond1, cond2) =>
+          splitConjunctivePredicates(cond1) ++ splitConjunctivePredicates(cond2)
+        case other => other :: Nil
+      }
+    }
+
+    val splitExpressions = splitConjunctivePredicates(resolvedExpression)
+    val targetOnlyPredicates = splitExpressions.filter(_.references.subsetOf(targetPlan.outputSet))
+
+    val minMaxOnlyExpressions = targetOnlyPredicates.filter(e => e match {
+      case GreaterThanOrEqual(_, _) => true
+      case LessThanOrEqual(_, _) => true
+      case LessThan(_, _) => true
+      case GreaterThan(_, _) => true
+      case _ => false
+    })
+
+    val equalOnlyExpressions = targetOnlyPredicates.filter(e => e match {
+      case EqualTo(_, _) => true
+      case EqualNullSafe(_, _) => true
+      case _ => false
+    })
+
+    val otherExpressions = targetOnlyPredicates.filter(e => e match {
+      case EqualTo(_, _) => false
+      case EqualNullSafe(_, _) => false
+      case GreaterThanOrEqual(_, _) => false
+      case LessThanOrEqual(_, _) => false
+      case LessThan(_, _) => false
+      case GreaterThan(_, _) => false
+      case _ => true
+    })
+
+    val removedPredicates = splitExpressions.filterNot(_.references.subsetOf(targetPlan.outputSet))
+
+    (deltaLog, unresolvedColumns, targetOnlyPredicates, minMaxOnlyExpressions, equalOnlyExpressions, otherExpressions, removedPredicates)
+  }
+
 
   private def getAllPartitionStats(filteredDF: DataFrame, groupByCol: String, aggCol: String) = filteredDF
     .groupBy(map_entries(col(groupByCol)))
@@ -92,7 +214,7 @@ object DeltaHelpers {
     val snapshot = tableLog.snapshot
     condition match {
       case None => snapshot.filesWithStatsForScan(Nil)
-      case Some(value) => snapshot.filesWithStatsForScan(Seq(expr(value).expr))
+      case Some(value) => snapshot.filesWithStatsForScan(Seq(functions.expr(value).expr))
     }
   }
 
