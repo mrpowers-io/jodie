@@ -11,6 +11,7 @@ import org.scalatest.funspec.AnyFunSpec
 import org.scalatest.matchers.should.Matchers.{convertToAnyShouldWrapper, equal}
 
 import scala.collection.mutable
+import scala.util.{Failure, Success, Try}
 
 class DeltaHelperSpec
     extends AnyFunSpec
@@ -971,4 +972,46 @@ class DeltaHelperSpec
       }
     }
   }
+
+
+  describe("Validate whether a set of columns can serve as a composite key candidate") {
+    it("Should fail when the list of columns to validate for the composite key is empty") {
+      val path = (os.pwd / "tmp" / "delta-tbl").toString()
+      Seq((1, "Benito", "Jackson"))
+        .toDF("id", "firstname", "lastname")
+        .write
+        .format("delta")
+        .mode("overwrite")
+        .save(path)
+
+      val expected = "At least one column must be specified."
+
+
+      val deltaTable = DeltaTable.forPath(path)
+      Try(DeltaHelpers.isCompositeKeyCandidate(deltaTable, List.empty)) match {
+        case Failure(exception) => assertResult(expected)(exception.getMessage)
+        case Success(_) => fail("isCompositeKeyCandidate function should return an exception when the list of columns is empty")
+      }
+    }
+
+    it("Should fail when the list of columns to validate for the composite key doesn't exit on the DeltaTable") {
+      val path = (os.pwd / "tmp" / "delta-tbl").toString()
+      val df = Seq((1, "Benito", "Jackson")).toDF("id", "firstname", "lastname")
+      val cols = List("firstname", "nickName")
+
+      df
+        .write
+        .format("delta")
+        .mode("overwrite")
+        .save(path)
+
+      val expected = s"The base table has these columns ${df.columns.mkString(",")}, but these columns are required ${cols.mkString(",")}"
+      val deltaTable = DeltaTable.forPath(path)
+      Try(DeltaHelpers.isCompositeKeyCandidate(deltaTable, cols)) match {
+        case Failure(exception) => assertResult(expected)(exception.getMessage)
+        case Success(_) => fail("isCompositeKeyCandidate function should return an exception when the list of columns is empty")
+      }
+    }
+  }
+
 }

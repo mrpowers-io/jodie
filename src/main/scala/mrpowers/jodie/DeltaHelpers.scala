@@ -451,4 +451,29 @@ object DeltaHelpers {
       cols: List[String],
       newColName: String
   ): DataFrame = withMD5Columns(deltaTable.toDF, cols, newColName)
+
+
+  def isCompositeKeyCandidate(deltaTable: DeltaTable, cols: List[String]): Boolean = {
+    val df: Dataset[Row] = deltaTable.toDF
+
+    val partitionColumn: Seq[Column] = cols.map(col)
+    val partitionedWindow: expressions.WindowSpec = partitionBy(partitionColumn: _*).orderBy(partitionColumn: _*)
+
+    if (cols.isEmpty)
+      throw new NoSuchElementException("At least one column must be specified.")
+
+
+    val areValidColumns: Boolean = cols.forall(col => df.columns.toSeq.contains(col))
+
+    if (!areValidColumns)
+      throw new NoSuchElementException(s"The base table has these columns ${df.columns.mkString(",")}, but these columns are required ${cols.mkString(",")}")
+
+    val duplicateRecords = deltaTable.toDF
+      .withColumn("amount_of_records", row_number().over(partitionedWindow))
+      .filter(col("amount_of_records") > 1)
+      .drop(col("amount_of_records"))
+
+    duplicateRecords.isEmpty
+  }
+
 }
