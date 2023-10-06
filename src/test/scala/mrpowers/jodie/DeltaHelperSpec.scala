@@ -1012,6 +1012,53 @@ class DeltaHelperSpec
         case Success(_) => fail("isCompositeKeyCandidate function should return an exception when the list of columns is empty")
       }
     }
+
+    it("Should return true when the compose key is a valid key") {
+      val path = (os.pwd / "tmp" / "delta-tbl").toString()
+      val df = Seq(
+        (2, "Maria", "Willis"),
+        (3, "Jose", "Travolta"),
+        (4, "Benito", "Jackson")
+      ).toDF("id", "firstname", "lastname")
+
+      val cols = List("id", "firstname")
+
+      df
+        .write
+        .format("delta")
+        .mode("overwrite")
+        .save(path)
+
+      val deltaTable = DeltaTable.forPath(path)
+      Try(DeltaHelpers.isCompositeKeyCandidate(deltaTable, cols)) match {
+        case Failure(_) => fail("isCompositeKeyCandidate function should return an exception when the list of columns is empty")
+        case Success(result) => assert(result)
+      }
+    }
+
+
+    it("Should return false when the compose key is an invalid key") {
+      val path = (os.pwd / "tmp" / "delta-tbl").toString()
+      val df = Seq(
+        (2, "Maria", "Willis"),
+        (3, "Benito", "Jackson"),
+        (4, "Benito", "Jackson")
+      ).toDF("id", "firstname", "lastname")
+
+      val cols = List("firstname", "lastname")
+
+      df
+        .write
+        .format("delta")
+        .mode("overwrite")
+        .save(path)
+
+      val deltaTable = DeltaTable.forPath(path)
+      Try(DeltaHelpers.isCompositeKeyCandidate(deltaTable, cols)) match {
+        case Failure(_) => fail("isCompositeKeyCandidate function should return an exception when the list of columns is empty")
+        case Success(result) => assert(!result)
+      }
+    }
   }
 
 }
