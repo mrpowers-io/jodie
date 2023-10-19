@@ -1030,10 +1030,8 @@ class DeltaHelperSpec
         .save(path)
 
       val deltaTable = DeltaTable.forPath(path)
-      Try(DeltaHelpers.isCompositeKeyCandidate(deltaTable, cols)) match {
-        case Failure(_) => fail("isCompositeKeyCandidate function should return an exception when the list of columns is empty")
-        case Success(result) => assert(result)
-      }
+
+      assert(DeltaHelpers.isCompositeKeyCandidate(deltaTable, cols))
     }
 
 
@@ -1054,11 +1052,8 @@ class DeltaHelperSpec
         .save(path)
 
       val deltaTable = DeltaTable.forPath(path)
-      Try(DeltaHelpers.isCompositeKeyCandidate(deltaTable, cols)) match {
-        case Failure(_) => fail("isCompositeKeyCandidate function should return an exception when the list of columns is empty")
-        case Success(result) => assert(!result)
-      }
+
+      assert(!DeltaHelpers.isCompositeKeyCandidate(deltaTable, cols))
     }
   }
-
 }

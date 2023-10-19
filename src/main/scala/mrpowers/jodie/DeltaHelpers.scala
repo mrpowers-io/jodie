@@ -469,9 +469,9 @@ object DeltaHelpers {
       throw new NoSuchElementException(s"The base table has these columns ${df.columns.mkString(",")}, but these columns are required ${cols.mkString(",")}")
 
     val duplicateRecords = deltaTable.toDF
-      .withColumn("amount_of_records", row_number().over(partitionedWindow))
-      .filter(col("amount_of_records") > 1)
-      .drop(col("amount_of_records"))
+      .groupBy(partitionColumn: _*).count()
+      .filter(col("count") > 1)
+      .drop(col("count"))
 
     duplicateRecords.isEmpty
   }
