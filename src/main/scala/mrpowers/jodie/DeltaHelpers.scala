@@ -452,22 +452,33 @@ object DeltaHelpers {
       newColName: String
   ): DataFrame = withMD5Columns(deltaTable.toDF, cols, newColName)
 
+  /**
+   * This function validates whether a set of columns is a candidate to be a composite key.
+   *
+   * @param deltaTable
+   *     The Delta table object
+   * @param cols
+   *     List of columns to be validated
+   * @return
+   *     True if the columns are unique and eligible to be a composite key, otherwise false.
+   */
 
   def isCompositeKeyCandidate(deltaTable: DeltaTable, cols: List[String]): Boolean = {
     val df: Dataset[Row] = deltaTable.toDF
 
     val partitionColumn: Seq[Column] = cols.map(col)
-    val partitionedWindow: expressions.WindowSpec = partitionBy(partitionColumn: _*).orderBy(partitionColumn: _*)
 
+    // Candidate columns should not be an empty list
     if (cols.isEmpty)
       throw new NoSuchElementException("At least one column must be specified.")
 
-
+    // Candidate columns should be part of the DeltaTable
     val areValidColumns: Boolean = cols.forall(col => df.columns.toSeq.contains(col))
 
     if (!areValidColumns)
       throw new NoSuchElementException(s"The base table has these columns ${df.columns.mkString(",")}, but these columns are required ${cols.mkString(",")}")
 
+    // Apply a function to check for duplicate records based on the specified keys.
     val duplicateRecords = deltaTable.toDF
       .groupBy(partitionColumn: _*).count()
       .filter(col("count") > 1)
