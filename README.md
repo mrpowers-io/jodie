@@ -224,6 +224,84 @@ DeltaHelpers.copyTable(deltaTable = deltaTable, targetTableName = Some(tableName
 Note the location where the table will be stored in this last function call 
 will be based on the spark conf property `spark.sql.warehouse.dir`.
 
+### Validate append
+
+The `validateAppend` function provides a mechanism for allowing some columns for schema evolution, but rejecting appends with columns that aren't specificly allowlisted.
+
+Suppose you have the following Delta table:
+
+```
++----+----+----+
+|col1|col2|col3|
++----+----+----+
+|   2|   b|   B|
+|   1|   a|   A|
++----+----+----+
+```
+Here's an appender function that wraps `validateAppend`:
+
+```scala
+DeltaHelpers.validateAppend(
+  deltaTable = deltaTable,
+  appendDF = appendDf,
+  requiredCols = List("col1", "col2"),
+  optionalCols = List("col4")
+)
+```
+
+You can append the following DataFrame that contains the required columns and the optional columns:
+
+```
++----+----+----+
+|col1|col2|col4|
++----+----+----+
+|   3|   c| cat|
+|   4|   d| dog|
++----+----+----+
+```
+
+Here's what the Delta table will contain after that data is appended:
+
+```
++----+----+----+----+
+|col1|col2|col3|col4|
++----+----+----+----+
+|   3|   c|null| cat|
+|   4|   d|null| dog|
+|   2|   b|   B|null|
+|   1|   a|   A|null|
++----+----+----+----+
+```
+
+You cannot append the following DataFrame which contains the required columns, but also contains another column (`col5`) that's not specified as an optional column.
+
+```
++----+----+----+
+|col1|col2|col5|
++----+----+----+
+|   4|   b|   A|
+|   5|   y|   C|
+|   6|   z|   D|
++----+----+----+
+```
+
+Here's the error you'll get when you attempt this write: ""
+
+You also cannot append the following DataFrame which is missing one of the required columns.
+
+```
++----+----+
+|col1|col4|
++----+----+
+|   4|   A|
+|   5|   C|
+|   6|   D|
++----+----+
+```
+
+Here's the error you'll get: ""
+
+
 ### Latest Version of Delta Table
 The function `latestVersion` return the latest version number of a table given its storage path. 
 
