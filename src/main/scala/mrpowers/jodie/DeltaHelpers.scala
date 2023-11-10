@@ -479,7 +479,8 @@ object DeltaHelpers {
       throw new NoSuchElementException(s"The base table has these columns ${df.columns.mkString(",")}, but these columns are required ${cols.mkString(",")}")
 
     // Apply a function to check for duplicate records based on the specified keys.
-    val duplicateRecords = deltaTable.toDF
+    val duplicateRecords =
+      deltaTable.toDF
       .groupBy(partitionColumn: _*).count()
       .filter(col("count") > 1)
       .drop(col("count"))
