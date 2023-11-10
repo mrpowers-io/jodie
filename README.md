@@ -372,7 +372,7 @@ Now execute the function:
 ```scala
 val result = DeltaHelpers.isCompositeKeyCandidate(
   deltaTable = deltaTable,
-  excludeCols = Seq("id", "firstName")
+  cols = Seq("id", "firstName")
 )
 ```
 
