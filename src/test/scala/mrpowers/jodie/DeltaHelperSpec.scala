@@ -461,7 +461,8 @@ class DeltaHelperSpec
       )
         .toDF("col1", "col2", "col4")
 
-      DeltaHelpers.validateAppend(deltaTable, appendDf, ["col1", "col2"], ["col4"] )
+      DeltaHelpers.validateAppend(deltaTable, appendDf, List("col1", "col2"),
+        List("col4" ))
 
       val expected = Seq(
         (1, "a", "A", None),
@@ -502,7 +503,8 @@ class DeltaHelperSpec
 
 
       val exceptionMessage = intercept[IllegalArgumentException] {
-        DeltaHelpers.validateAppend(deltaTable, appendDf, ["col1", "col2"], ["col4"] )
+        DeltaHelpers.validateAppend(deltaTable, appendDf, List("col1", "col2"),
+          List("col4") )
       }.getMessage
 
       assert(exceptionMessage.contains("but these columns are required"))
@@ -531,7 +533,8 @@ class DeltaHelperSpec
 
 
       val exceptionMessage = intercept[IllegalArgumentException] {
-        DeltaHelpers.validateAppend(deltaTable, appendDf, ["col1", "col2"], ["col4"])
+        DeltaHelpers.validateAppend(deltaTable, appendDf, List("col1", "col2"),
+          List("col4"))
       }.getMessage
 
       assert(exceptionMessage.contains("If you want to add the column to the table, you must set the optionalCols parameter"))
