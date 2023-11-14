@@ -373,7 +373,7 @@ object DeltaHelpers {
     for (requiredColumn <- requiredCols) {
       if (!appendDataColumns.contains(requiredColumn)) {
         throw new IllegalArgumentException(
-          s"The base Delta table has these columns $appendDataColumns, but these columns are required $requiredCols"
+          s"The base Delta table has these columns ${appendDataColumns.mkString("List(", ", ", ")")}, but these columns are required $requiredCols"
         )
       }
     }
@@ -389,7 +389,7 @@ object DeltaHelpers {
       }
     }
 
-    val details = deltaTable.toDF.select("location").collect()(0).getString(0)
+    val details = deltaTable.detail().select("location").collect().head.getString(0)
 
     // Write the appendDF to the Delta table
     appendDF.write.format("delta")

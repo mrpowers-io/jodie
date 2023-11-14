@@ -461,16 +461,18 @@ class DeltaHelperSpec
       )
         .toDF("col1", "col2", "col4")
 
-      DeltaHelpers.validateAppend(deltaTable, appendDf, List("col1", "col2"),
-        List("col4" ))
+      DeltaHelpers.validateAppend(deltaTable, appendDf, List("col1", "col2"), List("col4"))
 
       val expected = Seq(
-        (1, "a", "A", None),
-        (2, "b", "B", None),
-        (3, "c", None, "cat"),
-        (4, "d", None, "dog"),
-      ).toDF("col1", "col2", "col3", "col4")
+        (1, "a", "A", null),
+        (2, "b", "B", null),
+        (3, "c", null, "cat"),
+        (4, "d", null, "dog"),
+      )
+        .toDF("col1", "col2", "col3", "col4")
+
       val result = DeltaTable.forPath(path)
+
       assertSmallDataFrameEquality(
         result.toDF,
         expected,
@@ -507,7 +509,7 @@ class DeltaHelperSpec
           List("col4") )
       }.getMessage
 
-      assert(exceptionMessage.contains("but these columns are required"))
+      assert(exceptionMessage.contains("The column col5 is not part of the current Delta table. If you want to add the column to the table, you must set the optionalCols parameter"))
     }
     it("should fail to append dataframes with missing required columns"){
       val path = (os.pwd / "tmp" / "delta-lake-validate-missing-required-cols").toString()
@@ -537,7 +539,7 @@ class DeltaHelperSpec
           List("col4"))
       }.getMessage
 
-      assert(exceptionMessage.contains("If you want to add the column to the table, you must set the optionalCols parameter"))
+      assert(exceptionMessage.contains("The base Delta table has these columns List(col1, col4), but these columns are required List(col1, col2)"))
 
     }
   }
