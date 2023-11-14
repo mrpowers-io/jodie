@@ -351,6 +351,37 @@ The result will be the following:
 Seq("firstname","lastname")
 ```
 
+### Validate Composite Key
+The  `isCompositeKeyCandidate` function aids in verifying whether a given composite key qualifies as a unique key within your Delta table. 
+It returns true if the key is considered a potential composite key, and false otherwise.
+
+Suppose we have the following table:
+
+```
++----+---------+---------+
+|  id|firstname| lastname|
++----+---------+---------+
+|   1|   Benito|  Jackson|
+|   4|    Maria|     Pitt|
+|   6|  Rosalia| Travolta|
++----+---------+---------+
+```
+
+Now execute the function:
+```scala
+val result = DeltaHelpers.isCompositeKeyCandidate(
+  deltaTable = deltaTable,
+  cols = Seq("id", "firstName")
+)
+```
+
+The result will be the following:
+
+```scala
+true
+```
+
+
 ## Delta File Sizes
 
 The `deltaFileSizes` function returns a `Map[String,Long]` that contains the total size in bytes, the amount of files and the
