@@ -77,6 +77,13 @@ class DeltaHelperSpec
       actual("humanized_number_of_files") == "1"
       actual("humanized_average_file_size_in_bytes") == "1.088 kB"
     }
+
+    it("should display delta file sizes in a human readable fashion") {
+      val path = (os.pwd / "tmp" / "delta-table").toString()
+      createBaseDeltaTable(path, rows)
+      val deltaTable = DeltaTable.forPath(path)
+      DeltaHelpers.showDeltaFileSizes(deltaTable)
+    }
   }
   describe("remove duplicate records from delta table") {
     it("should remove duplicates successful") {

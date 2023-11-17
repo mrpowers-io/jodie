@@ -535,4 +535,19 @@ object DeltaHelpers {
     val result: String = resultOption.getOrElse(f"$n%.0f" + " B")
     result
   }
+
+  def showDeltaFileSizes(deltaTable: DeltaTable) = {
+    val details: Row = deltaTable.detail().select("numFiles", "sizeInBytes").collect()(0)
+    val (sizeInBytes, numberOfFiles) = 
+      (details.getAs[Long]("sizeInBytes"), details.getAs[Long]("numFiles"))
+    val avgFileSizeInBytes = if (numberOfFiles == 0) 0 else Math.round(sizeInBytes / numberOfFiles)
+    val formatter = java.text.NumberFormat.getIntegerInstance
+
+    val humanized_number_of_files = numberOfFiles.toInt
+    val humanized_size_in_bytes = humanizeBytes(sizeInBytes)
+    val humanized_average_file_size = humanizeBytes(avgFileSizeInBytes)
+
+    println( s"The delta table contains ${humanized_number_of_files} files with a size of ${humanized_size_in_bytes}."
+        + s" The average file size is ${humanized_average_file_size}")
+  }
 }
