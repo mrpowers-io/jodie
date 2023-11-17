@@ -509,7 +509,7 @@ class DeltaHelperSpec
           List("col4") )
       }.getMessage
 
-      assert(exceptionMessage.contains("The column col5 is not part of the current Delta table. If you want to add the column to the table, you must set the optionalCols parameter"))
+      assert(exceptionMessage.contains("The following columns are not part of the current Delta table. If you want to add these columns to the table, you must set the optionalCols parameter: List(col5)"))
     }
     it("should fail to append dataframes with missing required columns"){
       val path = (os.pwd / "tmp" / "delta-lake-validate-missing-required-cols").toString()

@@ -357,37 +357,17 @@ object DeltaHelpers {
                       requiredCols: List[String],
                       optionalCols: List[String]
                     ): Unit = {
-    // Check if deltaTable is an instance of DeltaTable
-    if (!deltaTable.isInstanceOf[DeltaTable]) {
-      throw new IllegalArgumentException("An existing delta table must be specified.")
-    }
-
-    // Check if appendDF is an instance of DataFrame
-    if (!appendDF.isInstanceOf[DataFrame]) {
-      throw new IllegalArgumentException("You must provide a DataFrame that is to be appended.")
-    }
 
     val appendDataColumns = appendDF.columns
-
-    // Check if all required columns are present in appendDF
-    for (requiredColumn <- requiredCols) {
-      if (!appendDataColumns.contains(requiredColumn)) {
-        throw new IllegalArgumentException(
-          s"The base Delta table has these columns ${appendDataColumns.mkString("List(", ", ", ")")}, but these columns are required $requiredCols"
-        )
-      }
-    }
-
     val tableColumns = deltaTable.toDF.columns
 
+    // Check if all required columns are present in appendDF
+    val missingColumns = requiredCols.filterNot(appendDataColumns.contains)
+    require(missingColumns.isEmpty, s"The base Delta table has these columns ${appendDataColumns.mkString("List(", ", ", ")")}, but these columns are required $requiredCols")
+
     // Check if all columns in appendDF are part of the current Delta table or optional
-    for (column <- appendDataColumns) {
-      if (!tableColumns.contains(column) && !optionalCols.contains(column)) {
-        throw new IllegalArgumentException(
-          s"The column $column is not part of the current Delta table. If you want to add the column to the table, you must set the optionalCols parameter."
-        )
-      }
-    }
+    val invalidColumns = appendDataColumns.filterNot(column => tableColumns.contains(column) || optionalCols.contains(column))
+    require(invalidColumns.isEmpty, s"The following columns are not part of the current Delta table. If you want to add these columns to the table, you must set the optionalCols parameter: ${invalidColumns.mkString("List(", ", ", ")")}")
 
     val details = deltaTable.detail().select("location").collect().head.getString(0)
 

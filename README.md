@@ -285,7 +285,7 @@ You cannot append the following DataFrame which contains the required columns, b
 +----+----+----+
 ```
 
-Here's the error you'll get when you attempt this write: "The column col5 is not part of the current Delta table. If you want to add the column to the table, you must set the optionalCols parameter"
+Here's the error you'll get when you attempt this write: "The following columns are not part of the current Delta table. If you want to add these columns to the table, you must set the optionalCols parameter: List(col5)"
 
 You also cannot append the following DataFrame which is missing one of the required columns.
 
