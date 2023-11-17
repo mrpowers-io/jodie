@@ -484,6 +484,14 @@ Map("size_in_bytes" -> 1320,
   "average_file_size_in_bytes" -> 660)
 ```
 
+## Humanize Bytes
+
+The function `humanizeBytes` formats a `integer` represeting a number of bytes into a human readable format.
+```
+DeltaHelpers.humanize_bytes(1234567890) # "1.23 GB"
+DeltaHelpers.humanize_bytes(1234567890000) # "1.23 TB"
+```
+
 ## Delta Table File Size Distribution
 The function `deltaFileSizeDistributionInMB` returns a `DataFrame` that contains the following stats in megabytes about file sizes in a Delta Table:
 ### `No. of Parquet Files, Mean File Size, Standard Deviation, Minimum File Size, Maximum File Size, 10th Percentile, 25th Percentile, Median, 75th Percentile, 90th Percentile, 95th Percentile.`

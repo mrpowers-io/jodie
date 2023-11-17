@@ -52,6 +52,31 @@ class DeltaHelperSpec
       actual("number_of_files") should equal(0)
       actual("average_file_size_in_bytes") should equal(0)
     }
+
+    it("should match delta file sizes in a human readable fashion") {
+      val path = (os.pwd / "tmp" / "delta-table").toString()
+      createBaseDeltaTable(path, rows)
+      val deltaTable = DeltaTable.forPath(path)
+      val fileSizes = DeltaHelpers.deltaFileSizes(deltaTable)
+      val humanize: ((String, AnyVal)) => (String, String) = {
+          case (key: String, value: Int) if key contains "size_in_bytes" =>
+              val humanizedVal = DeltaHelpers.humanizeBytes(value)
+              val humanizedKey = "humanized_" + key
+              humanizedKey -> humanizedVal
+          case (key: String, value: Long) if key contains "size_in_bytes" =>
+              val humanizedVal = DeltaHelpers.humanizeBytes(value)
+              val humanizedKey = "humanized_" + key
+              humanizedKey -> humanizedVal
+          case (key: String, value: Long) =>
+              val humanizedKey = "humanized_" + key
+              humanizedKey -> value.toString()
+      }
+      val actual = fileSizes.map(humanize)
+
+      actual("humanized_size_in_bytes") == "1.088 kB"
+      actual("humanized_number_of_files") == "1"
+      actual("humanized_average_file_size_in_bytes") == "1.088 kB"
+    }
   }
   describe("remove duplicate records from delta table") {
     it("should remove duplicates successful") {

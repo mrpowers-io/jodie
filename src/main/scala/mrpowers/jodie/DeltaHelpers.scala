@@ -527,4 +527,12 @@ object DeltaHelpers {
     duplicateRecords.isEmpty
   }
 
+  def humanizeBytes(n: Double): String = {
+    val tuples: Seq[(String, Double)] = Seq(("PB", 1e15), ("TB", 1e12), ("GB", 1e9), ("MB", 1e6), ("kB", 1e3))
+    val resultOption: Option[String] = tuples.collectFirst({
+      case (prefix, k) if n >= (k * 0.9) => f"${(n /k)}%.2f" + " " + prefix
+    })
+    val result: String = resultOption.getOrElse(f"$n%.0f" + " B")
+    result
+  }
 }
