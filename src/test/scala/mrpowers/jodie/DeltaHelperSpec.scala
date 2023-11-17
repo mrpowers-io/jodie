@@ -440,6 +440,111 @@ class DeltaHelperSpec
     }
   }
 
+  describe("Validate and append data to a delta table"){
+    it("should append dataframes with optional columns"){
+      val path = (os.pwd / "tmp" / "delta-lake-validate-append-valid-dataframe").toString()
+      Seq(
+        (1, "a", "A"),
+        (2, "b", "B"),
+      )
+        .toDF("col1", "col2", "col3")
+        .write
+        .format("delta")
+        .mode("overwrite")
+        .option("delta.logRetentionDuration", "interval 30 days")
+        .save(path)
+
+      val deltaTable = DeltaTable.forPath(path)
+
+      val appendDf = Seq(
+        (3, "c", "cat"),
+        (4, "d", "dog"),
+      )
+        .toDF("col1", "col2", "col4")
+
+      DeltaHelpers.validateAppend(deltaTable, appendDf, List("col1", "col2"), List("col4"))
+
+      val expected = Seq(
+        (1, "a", "A", null),
+        (2, "b", "B", null),
+        (3, "c", null, "cat"),
+        (4, "d", null, "dog"),
+      )
+        .toDF("col1", "col2", "col3", "col4")
+
+      val result = DeltaTable.forPath(path)
+
+      assertSmallDataFrameEquality(
+        result.toDF,
+        expected,
+        orderedComparison = false,
+        ignoreNullable = true
+      )
+
+    }
+    it("should fail to append dataframes with columns that are not on the accept list"){
+      val path = (os.pwd / "tmp" / "delta-lake-validate-cols-in-accepted-list").toString()
+      Seq(
+        (1, "a", "A"),
+        (2, "b", "B"),
+      )
+        .toDF("col1", "col2", "col3")
+        .write
+        .format("delta")
+        .mode("overwrite")
+        .option("delta.logRetentionDuration", "interval 30 days")
+        .save(path)
+
+      val deltaTable = DeltaTable.forPath(path)
+
+      val appendDf = Seq(
+        (4, "b", "A"),
+        (5, "y", "C"),
+        (6, "z", "D"),
+      )
+        .toDF("col1", "col2", "col5")
+
+
+      val exceptionMessage = intercept[IllegalArgumentException] {
+        DeltaHelpers.validateAppend(deltaTable, appendDf, List("col1", "col2"),
+          List("col4") )
+      }.getMessage
+
+      assert(exceptionMessage.contains("The following columns are not part of the current Delta table. If you want to add these columns to the table, you must set the optionalCols parameter: List(col5)"))
+    }
+    it("should fail to append dataframes with missing required columns"){
+      val path = (os.pwd / "tmp" / "delta-lake-validate-missing-required-cols").toString()
+      Seq(
+        (1, "a", "A"),
+        (2, "b", "B"),
+      )
+        .toDF("col1", "col2", "col3")
+        .write
+        .format("delta")
+        .mode("overwrite")
+        .option("delta.logRetentionDuration", "interval 30 days")
+        .save(path)
+
+      val deltaTable = DeltaTable.forPath(path)
+
+      val appendDf = Seq(
+        (4, "A"),
+        (5, "C"),
+        (6, "D"),
+      )
+        .toDF("col1", "col4")
+
+
+      val exceptionMessage = intercept[IllegalArgumentException] {
+        DeltaHelpers.validateAppend(deltaTable, appendDf, List("col1", "col2"),
+          List("col4"))
+      }.getMessage
+
+      assert(exceptionMessage.contains("The base Delta table has these columns List(col1, col4), but these columns are required List(col1, col2)"))
+
+    }
+  }
+
   describe("Append without duplicating data") {
     it(
       "should insert data into an existing delta table and not duplicates in case some records already exists"

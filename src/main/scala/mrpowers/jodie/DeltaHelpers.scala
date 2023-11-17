@@ -339,6 +339,45 @@ object DeltaHelpers {
       .save(storagePath)
   }
 
+  /**
+   * Validates and appends data to a Delta table. This function ensures that the provided DataFrame can be appended
+   * to the specified Delta table by checking data type compatibility and column presence.
+   *
+   * @param deltaTable   The Delta table to which data will be appended.
+   * @param appendDF     The DataFrame containing data to be appended.
+   * @param requiredCols The list of required columns in the appendDF.
+   * @param optionalCols The list of optional columns in the appendDF.
+   * @throws IllegalArgumentException if input arguments have an invalid type, are missing, or are empty.
+   * @throws IllegalArgumentException if required columns are missing in the provided Delta table.
+   * @throws IllegalArgumentException if a column in the append DataFrame is not part of the original Delta table.
+   */
+  def validateAppend(
+                      deltaTable: DeltaTable,
+                      appendDF: DataFrame,
+                      requiredCols: List[String],
+                      optionalCols: List[String]
+                    ): Unit = {
+
+    val appendDataColumns = appendDF.columns
+    val tableColumns = deltaTable.toDF.columns
+
+    // Check if all required columns are present in appendDF
+    val missingColumns = requiredCols.filterNot(appendDataColumns.contains)
+    require(missingColumns.isEmpty, s"The base Delta table has these columns ${appendDataColumns.mkString("List(", ", ", ")")}, but these columns are required $requiredCols")
+
+    // Check if all columns in appendDF are part of the current Delta table or optional
+    val invalidColumns = appendDataColumns.filterNot(column => tableColumns.contains(column) || optionalCols.contains(column))
+    require(invalidColumns.isEmpty, s"The following columns are not part of the current Delta table. If you want to add these columns to the table, you must set the optionalCols parameter: ${invalidColumns.mkString("List(", ", ", ")")}")
+
+    val details = deltaTable.detail().select("location").collect().head.getString(0)
+
+    // Write the appendDF to the Delta table
+    appendDF.write.format("delta")
+      .mode(SaveMode.Append)
+      .option("mergeSchema", "true")
+      .save(details)
+  }
+
   def getStorageLocation(deltaTable: DeltaTable): String = {
     val row          = deltaTable.detail().select("location").collect().head
     val locationPath = row.getString(0)
