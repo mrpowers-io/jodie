@@ -59,23 +59,23 @@ class DeltaHelperSpec
       val deltaTable = DeltaTable.forPath(path)
       val fileSizes = DeltaHelpers.deltaFileSizes(deltaTable)
       val humanize: ((String, AnyVal)) => (String, String) = {
-          case (key: String, value: Int) if key contains "size_in_bytes" =>
+          case (key: String, value: Double) if key contains "size_in_bytes" =>
               val humanizedVal = DeltaHelpers.humanizeBytes(value)
               val humanizedKey = "humanized_" + key
               humanizedKey -> humanizedVal
-          case (key: String, value: Long) if key contains "size_in_bytes" =>
+          case (key: String, value: Double) if key contains "size_in_bytes" =>
               val humanizedVal = DeltaHelpers.humanizeBytes(value)
               val humanizedKey = "humanized_" + key
               humanizedKey -> humanizedVal
-          case (key: String, value: Long) =>
+          case (key: String, value: Double) =>
               val humanizedKey = "humanized_" + key
               humanizedKey -> value.toString()
       }
       val actual = fileSizes.map(humanize)
 
-      actual("humanized_size_in_bytes") == "1.088 kB"
+      actual("humanized_size_in_bytes") == "1.09 kB"
       actual("humanized_number_of_files") == "1"
-      actual("humanized_average_file_size_in_bytes") == "1.088 kB"
+      actual("humanized_average_file_size_in_bytes") == "1.09 kB"
     }
 
     it("should display delta file sizes in a human readable fashion") {

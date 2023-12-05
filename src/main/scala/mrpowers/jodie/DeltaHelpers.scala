@@ -218,7 +218,7 @@ object DeltaHelpers {
     }
   }
 
-  def deltaFileSizes(deltaTable: DeltaTable) = {
+  def deltaFileSizes(deltaTable: DeltaTable): Map[String, Double] = {
     val details: Row = deltaTable.detail().select("numFiles", "sizeInBytes").collect()(0)
     val (sizeInBytes, numberOfFiles) =
       (details.getAs[Long]("sizeInBytes"), details.getAs[Long]("numFiles"))
@@ -537,17 +537,13 @@ object DeltaHelpers {
   }
 
   def showDeltaFileSizes(deltaTable: DeltaTable) = {
-    val details: Row = deltaTable.detail().select("numFiles", "sizeInBytes").collect()(0)
-    val (sizeInBytes, numberOfFiles) = 
-      (details.getAs[Long]("sizeInBytes"), details.getAs[Long]("numFiles"))
-    val avgFileSizeInBytes = if (numberOfFiles == 0) 0 else Math.round(sizeInBytes / numberOfFiles)
-    val formatter = java.text.NumberFormat.getIntegerInstance
+    val rawFileSizes = deltaFileSizes(deltaTable)
 
-    val humanized_number_of_files = numberOfFiles.toInt
-    val humanized_size_in_bytes = humanizeBytes(sizeInBytes)
-    val humanized_average_file_size = humanizeBytes(avgFileSizeInBytes)
+    val humanizedNumberOfFiles = rawFileSizes("number_of_files").toString
+    val humanizedSizeInBytes = humanizeBytes(rawFileSizes("size_in_bytes"))
+    val humanizedAverageFileSize = humanizeBytes(rawFileSizes("average_file_size_in_bytes"))
 
-    println( s"The delta table contains ${humanized_number_of_files} files with a size of ${humanized_size_in_bytes}."
-        + s" The average file size is ${humanized_average_file_size}")
+    println( s"The delta table contains ${humanizedNumberOfFiles} files with a size of ${humanizedSizeInBytes}."
+        + s" The average file size is ${humanizedAverageFileSize}")
   }
 }
