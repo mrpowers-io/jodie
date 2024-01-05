@@ -483,6 +483,32 @@ Map("size_in_bytes" -> 1320,
   "number_of_files" -> 2,
   "average_file_size_in_bytes" -> 660)
 ```
+## Show Delta File Sizes
+
+The function `showDeltaFileSizes` displays the size, average size and amount of files of a Delta table in a human readable fashion.
+
+Suppose you have the following table, partitioned by `col1`:
+
+```
++----+----+----+
+|col1|col2|col3|
++----+----+----+
+|   1|   A|   A|
+|   2|   A|   B|
++----+----+----+
+```
+
+Running `DeltaHelpers.showDeltaFileSizes` will display the following into the console:
+
+`"The delta table contains 2 files with a size of 1.32 kB.The average file size is 660 B"`
+
+## Humanize Bytes
+
+The function `humanizeBytes` formats a `integer` represeting a number of bytes into a human readable format.
+```
+DeltaHelpers.humanize_bytes(1234567890) # "1.23 GB"
+DeltaHelpers.humanize_bytes(1234567890000) # "1.23 TB"
+```
 
 ## Delta Table File Size Distribution
 The function `deltaFileSizeDistributionInMB` returns a `DataFrame` that contains the following stats in megabytes about file sizes in a Delta Table:

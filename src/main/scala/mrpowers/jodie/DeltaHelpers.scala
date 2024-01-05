@@ -218,7 +218,7 @@ object DeltaHelpers {
     }
   }
 
-  def deltaFileSizes(deltaTable: DeltaTable) = {
+  def deltaFileSizes(deltaTable: DeltaTable): Map[String, Double] = {
     val details: Row = deltaTable.detail().select("numFiles", "sizeInBytes").collect()(0)
     val (sizeInBytes, numberOfFiles) =
       (details.getAs[Long]("sizeInBytes"), details.getAs[Long]("numFiles"))
@@ -527,4 +527,23 @@ object DeltaHelpers {
     duplicateRecords.isEmpty
   }
 
+  def humanizeBytes(n: Double): String = {
+    val tuples: Seq[(String, Double)] = Seq(("PB", 1e15), ("TB", 1e12), ("GB", 1e9), ("MB", 1e6), ("kB", 1e3))
+    val resultOption: Option[String] = tuples.collectFirst({
+      case (prefix, k) if n >= (k * 0.9) => f"${(n /k)}%.2f" + " " + prefix
+    })
+    val result: String = resultOption.getOrElse(f"$n%.0f" + " B")
+    result
+  }
+
+  def showDeltaFileSizes(deltaTable: DeltaTable) = {
+    val rawFileSizes = deltaFileSizes(deltaTable)
+
+    val humanizedNumberOfFiles = rawFileSizes("number_of_files").toString
+    val humanizedSizeInBytes = humanizeBytes(rawFileSizes("size_in_bytes"))
+    val humanizedAverageFileSize = humanizeBytes(rawFileSizes("average_file_size_in_bytes"))
+
+    println( s"The delta table contains ${humanizedNumberOfFiles} files with a size of ${humanizedSizeInBytes}."
+        + s" The average file size is ${humanizedAverageFileSize}")
+  }
 }
