@@ -546,4 +546,83 @@ object DeltaHelpers {
     println( s"The delta table contains ${humanizedNumberOfFiles} files with a size of ${humanizedSizeInBytes}."
         + s" The average file size is ${humanizedAverageFileSize}")
   }
+
+  /**
+   * Multi-Cluster Write is a scenario which can result in version file (xxx.json) being overwritten by competing delta writer jobs
+   * which are not aware of each other's existence. Read this
+   * [[blog https://delta.io/blog/2022-05-18-multi-cluster-writes-to-delta-lake-storage-in-s3/]] to know more. It is aggravated by the
+   * uncertainty around the fact that whether the file system supports the atomocity and durability guarantees mentioned
+   * [[here https://docs.delta.io/latest/delta-storage.html#storage-configuration]]
+   * This method helps in detecting whether any of the multi-cluster write got affected and provides a host of information
+   * on the operation parameters.It is meant for debugging purposes, works with just the number of expected concurrent writes
+   * and the version number after which these writes occurred. For a more robust implementation, use [[checkLastMultiClusterWrite()]]
+   * which also provides the partitions which failed multi-cluster write
+   *
+   * @param path
+   * @param version
+   * @param numConcurrentWrite
+   * @return Tuple2[Boolean, Map[Long, Map[String, String]]
+   *         Boolean - Whether Multi-Cluster Write was successful or not
+   *            Long - Version Number
+   *            Map[String, String] - operation parameters corresponding to a version
+   */
+  def checkLastMultiClusterWrite(path: String, version: Long, numConcurrentWrite: Int)
+  : (Boolean, Map[Long, Map[String, String]]) = {
+    val tableLog = DeltaLog.forTable(SparkSession.active, path)
+    val history = tableLog.history.getHistory(Some(numConcurrentWrite + 1))
+    history.last.version.get == version match {
+      case true => (true, history.map(x => (x.version.get, x.operationParameters)).toMap)
+      case false => (false, history.map(x => (x.version.get, x.operationParameters)).toMap)
+    }
+  }
+
+  /**
+   * Multi-Cluster Write is a scenario which can result in version file (xxx.json) being overwritten by competing delta writer jobs
+   * which are not aware of each other's existence. Read this
+   * [[blog https://delta.io/blog/2022-05-18-multi-cluster-writes-to-delta-lake-storage-in-s3/]] to know more. It is aggravated by the
+   * uncertainty around the fact that whether the file system supports the atomocity and durability guarantees mentioned
+   * [[here https://docs.delta.io/latest/delta-storage.html#storage-configuration]]
+   * This method helps in detecting whether any of the multi-cluster write got affected and provides the exact partitions which were
+   * successful or not. It works with a start version and an optional end version and the partition conditions explicitly defined.
+   *
+   * @param path
+   * @param version
+   * @param numConcurrentWrite
+   * @return Tuple2(Boolean, List[(Boolean, String)])
+   *         Boolean - Whether Multi-Cluster Write was successful or not
+   *         List[(Boolean, String)])
+   *            Boolean - Whether this partition was successful in MCW
+   *            String - Same partition condition as provided in input
+   */
+  def checkMultiClusterWriteBetweenVersions(path: String, partitionValues: List[String], startVersion: Long, endVersion: Option[Long] = None): (Boolean, List[(Boolean, String)]) = {
+    val tableLog = DeltaLog.forTable(SparkSession.active, path)
+    val history = tableLog.history.getHistory(startVersion, endVersion)
+    val predicates = history.reverse.tail
+      .filter(x => x.operationParameters.contains("predicate"))
+      .map(x => x.operationParameters("predicate")).sorted
+    val result = checkForPartitionIntersection(predicates, partitionValues.sorted)
+    val notMatched = result.filter(a => a._1 == false)
+    notMatched.size match {
+      case 0 => (true, result)
+      case _ => (false, result)
+    }
+  }
+
+  private def checkForPartitionIntersection(history: Seq[String], partitionValues: List[String]) = {
+    partitionValues.map(providedPartitions => {
+      history.map(op => {
+        providedPartitions.split("and")
+          .map(condition => {
+            val escapedSearchString = condition.replace("=", "\\=")
+            val regexPattern = s".*${escapedSearchString.replace(" ", "\\s*")}.*"
+            val regex = regexPattern.r
+            regex.findFirstIn(op).isDefined
+          }).reduce(_ && _)
+      }).filter(x => x == true).size match {
+        case 0 => (false, providedPartitions)
+        case 1 => (true, providedPartitions)
+        case _ => (false, providedPartitions)
+      }
+    })
+  }
 }
