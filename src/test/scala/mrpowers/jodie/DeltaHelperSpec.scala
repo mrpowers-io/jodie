@@ -1192,6 +1192,7 @@ class DeltaHelperSpec
 
       assert(!DeltaHelpers.isCompositeKeyCandidate(deltaTable, cols))
     }
+  }
 
     describe("When Multi Cluster Write happens for Delta Lake") {
       def mergeToObtainSuccessiveVersions(deltaTable: DeltaTable): Unit = {
@@ -1231,7 +1232,7 @@ class DeltaHelperSpec
       }
       it("Should return invalid sanity check on erroneous versions") {
         val path = (os.pwd / "tmp" / "delta-table-mcw-error").toString()
-        //mimicMultiClusterWrite(path, false)
+        mimicMultiClusterWrite(path, false)
         val actual = DeltaHelpers.checkLastMultiClusterWrite(path, 1, 4)
         actual._1 should equal(false)
         actual._2.head._1 should equal(0)
@@ -1267,5 +1268,4 @@ class DeltaHelperSpec
         actual._2.filter(x => x._1 == true).size should equal(4)
       }
     }
-  }
 }
