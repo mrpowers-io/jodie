@@ -616,7 +616,7 @@ object DeltaHelpers {
             val escapedSearchString = condition.replace("=", "\\=")
             val regexPattern = s".*${escapedSearchString.replace(" ", "\\s*")}.*"
             val regex = regexPattern.r
-            regex.findFirstIn(op).isDefined
+            regex.findFirstIn(op.replaceAll("#\\d+", "")).isDefined
           }).reduce(_ && _)
       }).filter(x => x == true).size match {
         case 0 => (false, providedPartitions)
