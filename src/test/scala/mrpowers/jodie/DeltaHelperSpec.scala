@@ -1193,4 +1193,79 @@ class DeltaHelperSpec
       assert(!DeltaHelpers.isCompositeKeyCandidate(deltaTable, cols))
     }
   }
+
+    describe("When Multi Cluster Write happens for Delta Lake") {
+      def mergeToObtainSuccessiveVersions(deltaTable: DeltaTable): Unit = {
+        import spark.implicits._
+        minMaxRows.groupBy(x => x._3).foreach(x => {
+          val updates = x._2.toDF("id", "firstname", "lastname")
+          deltaTable.as("snapshot").merge(updates.as("delta"),
+            s"snapshot.id = delta.id and snapshot.lastname = '${x._1}'")
+            .whenMatched().updateAll()
+            .execute()
+        })
+      }
+
+      def mimicMultiClusterWrite(path: String, modifyMetadata: Boolean): Unit = {
+        spark.conf.set("spark.sql.files.maxRecordsPerFile", "4")
+        createBaseDeltaTableWithPartitions(path, Seq("lastname"), minMaxRows)
+        val deltaTable = DeltaTable.forPath(path)
+        mergeToObtainSuccessiveVersions(deltaTable)
+        modifyMetadata match {
+          case true => spark.sql(s"ALTER TABLE delta.`${path}` SET TBLPROPERTIES (delta.enableChangeDataFeed = true)")
+            mergeToObtainSuccessiveVersions(deltaTable)
+          case false =>
+        }
+      }
+
+      it("Should return valid sanity check on existing versions") {
+        val path = (os.pwd / "tmp" / "delta-table-mcw-valid").toString()
+        mimicMultiClusterWrite(path, false)
+        val actual = DeltaHelpers.checkLastMultiClusterWrite(path, 0, 4)
+        actual._1 should equal(true)
+        actual._2.last._1 should equal(4)
+        var checkVersions = 0
+        actual._2.foreach(x => {
+          x._1 should equal(checkVersions)
+          checkVersions = checkVersions + 1
+        })
+      }
+      it("Should return invalid sanity check on erroneous versions") {
+        val path = (os.pwd / "tmp" / "delta-table-mcw-error").toString()
+        mimicMultiClusterWrite(path, false)
+        val actual = DeltaHelpers.checkLastMultiClusterWrite(path, 1, 4)
+        actual._1 should equal(false)
+        actual._2.head._1 should equal(0)
+      }
+
+      it("Should return invalid on delta table alterations conflicting with MCW") {
+        val path = (os.pwd / "tmp" / "delta-table-mcw-conflict").toString()
+        mimicMultiClusterWrite(path, true)
+        val actual = DeltaHelpers.checkLastMultiClusterWrite(path, 4, 4)
+        actual._1 should equal(false)
+        actual._2.head._1 should equal(5)
+      }
+
+
+      it("Should return invalid sanity check with erroneous versions identified") {
+        val path = (os.pwd / "tmp" / "delta-table-mcw-error-identified").toString()
+        mimicMultiClusterWrite(path, true)
+        val actual = DeltaHelpers.checkMultiClusterWriteBetweenVersions(path,
+          List("lastname = 'Willis' and id = delta.id", "lastname = 'Travolta' and id = delta.id",
+            "lastname = 'Pitt' and id = delta.id", "lastname = 'Roy' and id = delta.id"), 0, Some(4))
+        actual._1 should equal(false)
+        actual._2.filter(x => x._1 == false).size should equal(1)
+        actual._2.filter(x => x._1 == true).size should equal(3)
+      }
+      it("Should return valid sanity check with correct versions matched") {
+        val path = (os.pwd / "tmp" / "delta-table-mcw-correct-match").toString()
+        mimicMultiClusterWrite(path, true)
+        val actual = DeltaHelpers.checkMultiClusterWriteBetweenVersions(path,
+          List("lastname = 'Willis' and id = delta.id", "lastname = 'Travolta' and id = delta.id",
+            "lastname = 'Pitt' and id = delta.id", "lastname = 'Jackson' and id = delta.id"), 0, Some(4))
+        actual._1 should equal(true)
+        actual._2.filter(x => x._1 == false).size should equal(0)
+        actual._2.filter(x => x._1 == true).size should equal(4)
+      }
+    }
 }
