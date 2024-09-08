@@ -139,7 +139,7 @@ object DeltaHelpers {
       .allFiles
       .filter(a => startTime.forall(a.modificationTime >= _.toEpochMilli) && endTime.forall(a.modificationTime <= _.toEpochMilli))
       .withColumn("partitionValuesString", col("partitionValues").cast(StringType))
-      .dropDuplicates("partitionValues")
+      .dropDuplicates("partitionValuesString")
       .select("partitionValues")
       .collect()
       .map(_.getAs[Map[String, String]](0))
