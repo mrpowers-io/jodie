@@ -4,12 +4,14 @@ import com.github.mrpowers.spark.daria.sql.SparkSessionExt.SparkSessionMethods
 import com.github.mrpowers.spark.fast.tests.DataFrameComparer
 import io.delta.tables.DeltaTable
 import mrpowers.jodie.delta.DeltaConstants._
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.delta.DeltaLog
 import org.apache.spark.sql.types.{IntegerType, StringType}
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.funspec.AnyFunSpec
 import org.scalatest.matchers.should.Matchers.{convertToAnyShouldWrapper, equal}
 
+import java.time.Instant
 import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
@@ -469,6 +471,106 @@ class DeltaHelperSpec
           "Ambiguous destination only one of the two must be defined targetPath or targetTableName."
         )
       )
+    }
+  }
+
+  describe("get updated partitions and optimize those partitions") {
+    it("should get updated partition without time filter") {
+      val path = (os.pwd / "tmp" / "delta-get-updated-partition-without-time-filter").toString()
+
+      createBaseDeltaTableWithPartitions(path, Seq("firstname", "lastname"), partRows)
+      Seq(
+        (8, "Benito", "Jackson"),
+        (9, "Maria", "Willis"),
+        (10, "Percy", "Jackson")
+      )
+        .toDF("id", "firstname", "lastname")
+        .write
+        .format("delta")
+        .mode("append")
+        .option("delta.logRetentionDuration", "interval 30 days")
+        .save(path)
+
+      val actualUpdatedPartitions = DeltaHelpers.getUpdatedPartitions(path)
+      val expectedUpdatedPartitions = Array(
+        Map("firstname" -> "Benito", "lastname" -> "Jackson"),
+        Map("firstname" -> "Gabriela", "lastname" -> "Travolta"),
+        Map("firstname" -> "Jose", "lastname" -> "Travolta"),
+        Map("firstname" -> "Maria", "lastname" -> "Pitt"),
+        Map("firstname" -> "Maria", "lastname" -> "Willis"),
+        Map("firstname" -> "Patricia", "lastname" -> "Jackson"),
+        Map("firstname" -> "Percy", "lastname" -> "Jackson")
+      )
+
+      assert(actualUpdatedPartitions.sameElements(expectedUpdatedPartitions))
+    }
+
+    it("should get updated partition with time filter") {
+      val path = (os.pwd / "tmp" / "delta-get-updated-partition-without-time-filter").toString()
+
+      createBaseDeltaTableWithPartitions(path, Seq("firstname", "lastname"), partRows)
+
+      val startTime = Instant.now()
+      Seq(
+        (8, "Benito", "Jackson"),
+        (9, "Maria", "Willis"),
+        (10, "Percy", "Jackson")
+      )
+        .toDF("id", "firstname", "lastname")
+        .write
+        .format("delta")
+        .mode("append")
+        .option("delta.logRetentionDuration", "interval 30 days")
+        .save(path)
+      val endTime = Instant.now()
+
+      Seq(
+        (3, "Jose", "Travolta"),
+        (4, "Patricia", "Jackson")
+      )
+        .toDF("id", "firstname", "lastname")
+        .write
+        .format("delta")
+        .mode("append")
+        .option("delta.logRetentionDuration", "interval 30 days")
+        .save(path)
+
+      val expectedUpdatedPartitions = Array(
+        Map("firstname" -> "Benito", "lastname" -> "Jackson"),
+        Map("firstname" -> "Maria", "lastname" -> "Willis"),
+        Map("firstname" -> "Percy", "lastname" -> "Jackson")
+      )
+
+
+      val actualUpdatedPartitions = DeltaHelpers.getUpdatedPartitions(path, Some(startTime), Some(endTime))
+      assert(actualUpdatedPartitions.sameElements(expectedUpdatedPartitions))
+    }
+
+    it("should optimize updated partitions") {
+      val path = (os.pwd / "tmp" / "delta-get-updated-partition-without-time-filter").toString()
+
+      createBaseDeltaTableWithPartitions(path, Seq("firstname", "lastname"), partRows)
+
+
+      val startTime = Instant.now()
+      Seq(
+          (8, "Benito", "Jackson"),
+          (9, "Maria", "Willis"),
+          (10, "Percy", "Jackson"),
+          (11, "Benito", "Jackson"),
+          (12, "Jose", "Travolta")
+      )
+        .toDF("id", "firstname", "lastname")
+        .write
+        .format("delta")
+        .mode("append")
+        .option("delta.logRetentionDuration", "interval 30 days")
+        .save(path)
+      val endTime = Instant.now()
+
+      val optimizedDf = DeltaHelpers.optimizeUpdatedPartitions(path, Some(startTime), Some(endTime))
+      val numOptimizedPartition = optimizedDf.select("metrics.partitionsOptimized").first().getLong(0)
+      assert(numOptimizedPartition == 3)
     }
   }
 

@@ -9,7 +9,9 @@ import org.apache.spark.sql.delta.DeltaLog
 import org.apache.spark.sql.delta.actions.AddFile
 import org.apache.spark.sql.expressions.Window.partitionBy
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types.StringType
 
+import java.time.Instant
 import scala.collection.mutable
 
 object DeltaHelpers {
@@ -122,6 +124,44 @@ object DeltaHelpers {
           deltaTxn.filterFiles(removedPredicates).count(a => true),
         TOTAL_NUM_FILES -> deltaLog.snapshot.filesWithStatsForScan(Nil).count(),
         UNRESOLVED_COLS -> unresolvedColumns)
+    }
+  }
+
+  /**
+   * Gets the number of updated partitions in a Delta Table for a given time range. This is particularly useful in cases
+   * where you want to find partitions affected by append/merge operations and want to run a compaction or vacuum operation
+   * on them
+   */
+  def getUpdatedPartitions(path: String, startTime: Option[Instant] = None, endTime: Option[Instant] = None): Array[Map[String, String]] = {
+    DeltaLog
+      .forTable(SparkSession.active, path)
+      .snapshot
+      .allFiles
+      .filter(a => startTime.forall(a.modificationTime >= _.toEpochMilli) && endTime.forall(a.modificationTime <= _.toEpochMilli))
+      .withColumn("partitionValuesString", col("partitionValues").cast(StringType))
+      .dropDuplicates("partitionValuesString")
+      .select("partitionValues")
+      .collect()
+      .map(_.getAs[Map[String, String]](0))
+  }
+
+  /**
+   * Performs DeltaTable optimization on recently updated partitions. This function will automatically determine updated partitions
+   * within startTime and endTime and run a compaction operation on them. If zOrderCols are provided, it will run a zOrder operation
+   * */
+  def optimizeUpdatedPartitions(path: String, startTime: Option[Instant], endTime: Option[Instant], zOrderCols: Option[Seq[String]] = None): DataFrame = {
+    val updatedPartitionsCondition = getUpdatedPartitions(path, startTime, endTime)
+      .map(_.map { case (p, v) => s"$p = '$v'" }.mkString("(", " AND ", ")"))
+      .mkString(" OR ")
+
+    val optimizeBuilder = DeltaTable
+      .forPath(path)
+      .optimize()
+      .where(updatedPartitionsCondition)
+
+    zOrderCols match {
+      case Some(cols) => optimizeBuilder.executeZOrderBy(cols: _*)
+      case None       => optimizeBuilder.executeCompaction()
     }
   }
 
